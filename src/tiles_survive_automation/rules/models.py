@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -51,7 +51,9 @@ class RuleStep:
             "confidence_threshold": self.confidence_threshold,
             "strategy": self.strategy.value,
             "verification_json": (
-                json.dumps(self.verification) if self.verification else None
+                json.dumps(self.verification)
+                if self.verification is not None
+                else None
             ),
             "screenshot_path": self.screenshot_path,
             "delay_after_ms": self.delay_after_ms,

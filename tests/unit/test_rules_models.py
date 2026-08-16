@@ -52,6 +52,15 @@ def test_rule_step_verification_none_round_trips():
     assert restored.verification is None
 
 
+def test_rule_step_verification_empty_dict_round_trips():
+    step = _step(verification={})
+    row = step.to_row()
+    restored = RuleStep.from_row(row)
+
+    assert restored.verification == {}
+    assert restored.verification is not None
+
+
 def test_rule_holds_ordered_steps():
     steps = [_step(order_index=0), _step(order_index=1, name="Click -> Help")]
     rule = Rule(id=None, name="Alliance Help", description=None,
