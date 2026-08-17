@@ -8,7 +8,22 @@ if sys.platform != "win32":
 
 import win32api
 
+from tiles_survive_automation import config
+
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
+
+
+def _debug_log(message: str) -> None:
+    """Temporary diagnostic logging while we track down a cursor-movement
+    bug: appends straight to the execution log file so it shows up
+    alongside the app's own logs without needing a logger instance
+    threaded through InputController's constructor."""
+    try:
+        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        with open(config.LOGS_DIR / "execution.log", "a", encoding="utf-8") as f:
+            f.write(f"[CURSOR-DEBUG] {message}\n")
+    except OSError:
+        pass
 
 ULONG_PTR = ctypes.c_size_t
 
@@ -108,9 +123,22 @@ def _send_key_input(vk_code: int, key_up: bool) -> None:
 
 
 def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) -> None:
+    v_left = _user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    v_top = _user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+    v_width = _user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    v_height = _user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
     nx, ny = _normalized(x, y)
+    before = win32api.GetCursorPos()
+    _debug_log(
+        f"target=({x},{y}) normalized=({nx},{ny}) "
+        f"virtual_screen=(left={v_left},top={v_top},w={v_width},h={v_height}) "
+        f"button_flag={button_flag} cursor_before={before}"
+    )
     _send_mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK
                        | button_flag, nx, ny, mouse_data)
+    time.sleep(0.05)
+    after = win32api.GetCursorPos()
+    _debug_log(f"cursor_after={after} (target was ({x},{y}))")
 
 
 class Win32InputController:
