@@ -1,4 +1,3 @@
-import cv2
 import numpy as np
 
 from tiles_survive_automation.app_logging.structured_logger import get_execution_logger
@@ -72,7 +71,8 @@ def test_record_save_play_cycle_clicks_expected_coordinates(tmp_path):
 
     # Play
     input_controller = FakeInputController()
-    execution_repository = ExecutionRepository(connect(":memory:"))
+    exec_conn = connect(":memory:")
+    execution_repository = ExecutionRepository(exec_conn)
     logger = get_execution_logger(tmp_path / "execution.log")
     engine = PlaybackEngine(window_manager, capture, input_controller,
                               execution_repository, logger, templates_dir)
@@ -81,3 +81,20 @@ def test_record_save_play_cycle_clicks_expected_coordinates(tmp_path):
 
     assert context.state == PlaybackState.COMPLETED
     assert input_controller.calls == [("click", 70, 40, "left")]
+
+    # Verify that Strategy 1 (visual template matching) was used
+    # Query the ExecutionStep to confirm matched_template and confidence are non-NULL,
+    # proving the template-capture → save → reload → match pipeline genuinely worked
+    step_row = exec_conn.execute(
+        "SELECT matched_template, confidence FROM ExecutionStep LIMIT 1"
+    ).fetchone()
+    assert step_row is not None, "No ExecutionStep found in database"
+    matched_template, confidence = step_row
+    assert matched_template is not None, (
+        "Template matching should have been used (matched_template should not be None). "
+        "This proves Strategy 1 (visual matching) was invoked, not Strategy 2 (fallback)."
+    )
+    assert confidence is not None, "Confidence should have been recorded by Strategy 1"
+    assert confidence >= 0.9, (
+        f"Confidence should be high (>= 0.9) for exact pixel match, got {confidence}"
+    )
