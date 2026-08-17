@@ -64,7 +64,7 @@ class PlaybackEngine:
             except Exception as e:
                 message = f"step '{step.name}' raised an exception: {e}"
                 self._input_controller.release_all()
-                self._logger.error(message, extra={"rule_name": rule.name})
+                self._logger.exception(message, extra={"rule_name": rule.name})
                 context.fail(message)
                 self._execution_repository.finish_execution(execution_id, "FAILED", message)
                 return context
@@ -119,28 +119,40 @@ class PlaybackEngine:
             from_x, from_y, matched_template, confidence = from_point
             to_x, to_y = to_point
             duration_ms = step.params.get("duration_ms", 200)
-            self._input_controller.drag(left + from_x, top + from_y, left + to_x,
-                                          top + to_y, duration_ms)
+            abs_from_x, abs_from_y = left + from_x, top + from_y
+            abs_to_x, abs_to_y = left + to_x, top + to_y
+            self._logger.info(
+                f"About to drag from ({abs_from_x!r}:{type(abs_from_x).__name__}, "
+                f"{abs_from_y!r}:{type(abs_from_y).__name__}) to "
+                f"({abs_to_x!r}:{type(abs_to_x).__name__}, "
+                f"{abs_to_y!r}:{type(abs_to_y).__name__}) duration_ms={duration_ms!r}"
+            )
+            self._input_controller.drag(abs_from_x, abs_from_y, abs_to_x, abs_to_y, duration_ms)
             return (from_x, from_y, matched_template, confidence,
-                    f"Drag from x={left + from_x} y={top + from_y} "
-                    f"to x={left + to_x} y={top + to_y}")
+                    f"Drag from x={abs_from_x} y={abs_from_y} to x={abs_to_x} y={abs_to_y}")
 
         point = self._resolve_point(step, frame, width, height, "relative_x", "relative_y")
         if point is None:
             return None
         x, y, matched_template, confidence = point
+        abs_x, abs_y = left + x, top + y
+
+        self._logger.info(
+            f"About to {step.step_type.value} at ({abs_x!r}:{type(abs_x).__name__}, "
+            f"{abs_y!r}:{type(abs_y).__name__})"
+        )
 
         if step.step_type == StepType.RIGHT_CLICK:
-            self._input_controller.click(left + x, top + y, button="right")
+            self._input_controller.click(abs_x, abs_y, button="right")
         elif step.step_type == StepType.DOUBLE_CLICK:
-            self._input_controller.double_click(left + x, top + y)
+            self._input_controller.double_click(abs_x, abs_y)
         elif step.step_type == StepType.SCROLL:
-            self._input_controller.scroll(left + x, top + y, step.params.get("delta", 0))
+            self._input_controller.scroll(abs_x, abs_y, step.params.get("delta", 0))
         else:
-            self._input_controller.click(left + x, top + y)
+            self._input_controller.click(abs_x, abs_y)
 
         return (x, y, matched_template, confidence,
-                f"Click x={left + x} y={top + y}")
+                f"Click x={abs_x} y={abs_y}")
 
     def _resolve_point(self, step: RuleStep, frame, width: int, height: int,
                          x_key: str, y_key: str):
