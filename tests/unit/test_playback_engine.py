@@ -206,3 +206,53 @@ def test_drag_step_resolves_from_and_to_points_relatively(tmp_path):
 
     assert context.state == PlaybackState.COMPLETED
     assert input_controller.calls == [("drag", 10, 10, 80, 80, 150)]
+
+
+class _AbortOnFirstClickInputController(FakeInputController):
+    """Subclass of FakeInputController that aborts the engine on first click."""
+
+    def __init__(self, engine):
+        super().__init__()
+        self._engine = engine
+        self._click_count = 0
+
+    def click(self, x: int, y: int, button: str = "left") -> None:
+        self._click_count += 1
+        if self._click_count == 1:
+            # Trigger abort on first click (simulating F9 pressed mid-step)
+            self._engine.abort()
+        super().click(x, y, button)
+
+
+def test_abort_mid_run_calls_release_all_and_stops(tmp_path):
+    frame = np.full((100, 100, 3), 10, dtype=np.uint8)
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+
+    # Create a rule with 2 click steps so there's a second step to be interrupted
+    step1 = _click_step(template_path=None, strategy=StrategyType.RELATIVE_ONLY)
+    step2 = _click_step(template_path=None, strategy=StrategyType.RELATIVE_ONLY)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None,
+                steps=[step1, step2])
+
+    window = WindowInfo(hwnd=1, title="Tiles Survive", client_rect=(0, 0, 100, 100))
+    window_manager = FakeWindowManager([window])
+    capture = FakeScreenCapture(frame)
+    repo = ExecutionRepository(connect(":memory:"))
+    logger = get_execution_logger(tmp_path / "execution.log")
+
+    engine = PlaybackEngine(window_manager, capture, None, repo, logger,
+                            templates_dir=templates_dir)
+    # Wire the custom input controller that aborts on first click
+    input_controller = _AbortOnFirstClickInputController(engine)
+    engine._input_controller = input_controller
+
+    context = engine.run(rule, hwnd=1)
+
+    # Assert the abort path was taken mid-loop
+    assert context.state == PlaybackState.STOPPED
+    # release_all() should have been called when abort was detected
+    assert ("release_all",) in input_controller.calls
+    # Only one click should have happened (step 1); step 2 was never executed
+    click_calls = [c for c in input_controller.calls if c[0] == "click"]
+    assert len(click_calls) == 1
