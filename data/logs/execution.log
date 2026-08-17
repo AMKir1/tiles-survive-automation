@@ -355,3 +355,93 @@ pywintypes.error: (0, 'SetCursorPos', 'No error message is available')
 [CURSOR-DEBUG] target=(1173,382) cursor_before=(631, 950) total_delta=(542,-568) button_flag=2
 [CURSOR-DEBUG] cursor_after=(1605, 0) (target was (1173,382)) steps=57
 23:43:10 [5] Click x=1173 y=382
+23:50:31 [-] About to ClickImage at (292:int, 251:int)
+[CURSOR-DEBUG] target=(292,251) cursor_before=(958, 225) total_delta=(-666,26) button_flag=2
+[CURSOR-DEBUG] cursor_after=(0, 264) (target was (292,251)) steps=67
+23:50:32 [5] Click x=292 y=251
+23:50:35 [5] Wait 2237ms
+23:50:35 [-] About to DoubleClick at (144:int, 775:int)
+[CURSOR-DEBUG] target=(144,775) cursor_before=(0, 415) total_delta=(144,360) button_flag=2
+[CURSOR-DEBUG] cursor_after=(511, 998) (target was (144,775)) steps=37
+[CURSOR-DEBUG] target=(144,775) cursor_before=(511, 998) total_delta=(-367,-223) button_flag=2
+[CURSOR-DEBUG] cursor_after=(40, 570) (target was (144,775)) steps=37
+23:50:36 [5] Click x=144 y=775
+23:50:38 [5] Wait 1997ms
+23:50:38 [-] About to DoubleClick at (928:int, 948:int)
+[CURSOR-DEBUG] target=(928,948) cursor_before=(561, 676) total_delta=(367,272) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1260, 951) (target was (928,948)) steps=37
+[CURSOR-DEBUG] target=(928,948) cursor_before=(1256, 940) total_delta=(-328,8) button_flag=2
+[CURSOR-DEBUG] cursor_after=(739, 956) (target was (928,948)) steps=33
+23:50:39 [5] Click x=928 y=948
+23:50:42 [5] Wait 2441ms
+23:50:42 [-] About to DoubleClick at (994:int, 465:int)
+[CURSOR-DEBUG] target=(994,465) cursor_before=(1052, 1037) total_delta=(-58,-572) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1080, 253) (target was (994,465)) steps=58
+[CURSOR-DEBUG] target=(994,465) cursor_before=(1166, 310) total_delta=(-172,155) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1071, 871) (target was (994,465)) steps=18
+23:50:43 [5] Click x=994 y=465
+23:50:45 [5] Wait 1684ms
+23:50:45 [-] About to DoubleClick at (938:int, 789:int)
+[CURSOR-DEBUG] target=(938,789) cursor_before=(1012, 120) total_delta=(-74,669) button_flag=2
+[CURSOR-DEBUG] cursor_after=(900, 1042) (target was (938,789)) steps=67
+[CURSOR-DEBUG] target=(938,789) cursor_before=(900, 1042) total_delta=(38,-253) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1042, 338) (target was (938,789)) steps=26
+23:50:46 [5] Click x=938 y=789
+23:50:52 [5] Wait 5650ms
+23:50:52 [-] About to ClickImage at (810:int, 224:int)
+[CURSOR-DEBUG] target=(810,224) cursor_before=(975, 100) total_delta=(-165,124) button_flag=2
+[CURSOR-DEBUG] cursor_after=(378, 192) (target was (810,224)) steps=17
+23:50:52 [5] Click x=810 y=224
+23:52:42 [-] About to ClickImage at (1114:int, 605:int)
+[CURSOR-DEBUG] target=(1114,605) cursor_before=(939, 226) total_delta=(175,379) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1202, 795) (target was (1114,605)) steps=38
+23:52:43 [6] Click x=1114 y=605
+23:52:44 [6] Wait 1896ms
+23:52:45 [-] About to ClickImage at (141:int, 765:int)
+[CURSOR-DEBUG] target=(141,765) cursor_before=(1202, 795) total_delta=(-1061,-30) button_flag=2
+[CURSOR-DEBUG] cursor_after=(0, 750) (target was (141,765)) steps=107
+23:52:46 [6] Click x=141 y=765
+23:52:48 [6] Wait 1824ms
+23:52:48 [-] About to ClickImage at (939:int, 972:int)
+[CURSOR-DEBUG] target=(939,972) cursor_before=(0, 750) total_delta=(939,222) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1403, 1082) (target was (939,972)) steps=94
+23:52:49 [6] Click x=939 y=972
+23:52:52 [6] Wait 2296ms
+23:52:52 [-] About to ClickImage at (975:int, 800:int)
+[CURSOR-DEBUG] target=(975,800) cursor_before=(529, 725) total_delta=(446,75) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1108, 659) (target was (975,800)) steps=45
+23:52:52 [6] Click x=975 y=800
+23:52:54 [6] Wait 1560ms
+23:52:54 [-] About to ClickImage at (963:int, 776:int)
+[CURSOR-DEBUG] target=(963,776) cursor_before=(1365, 709) total_delta=(-402,67) button_flag=2
+[CURSOR-DEBUG] cursor_after=(772, 835) (target was (963,776)) steps=41
+23:52:55 [6] Click x=963 y=776
+23:53:00 [6] Wait 4840ms
+23:53:00 [-] About to ClickImage at (810:int, 220:int)
+[CURSOR-DEBUG] target=(810,220) cursor_before=(1103, 516) total_delta=(-293,-296) button_flag=2
+[CURSOR-DEBUG] cursor_after=(557, 55) (target was (810,220)) steps=30
+23:53:00 [6] Click x=810 y=220
+23:53:41 [-] About to ClickImage at (166:int, 762:int)
+[CURSOR-DEBUG] target=(166,762) cursor_before=(948, 221) total_delta=(-782,541) button_flag=2
+[CURSOR-DEBUG] cursor_after=(0, 1033) (target was (166,762)) steps=79
+23:53:42 [7] Click x=166 y=762
+23:53:43 [7] Wait 1496ms
+23:53:43 [-] About to ClickImage at (1408:int, 590:int)
+[CURSOR-DEBUG] target=(1408,590) cursor_before=(209, 1076) total_delta=(1199,-486) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1804, 409) (target was (1408,590)) steps=120
+23:53:45 [7] Click x=1408 y=590
+23:53:47 [7] Wait 1888ms
+23:53:47 [-] About to ClickImage at (1641:int, 501:int)
+[CURSOR-DEBUG] target=(1641,501) cursor_before=(1919, 874) total_delta=(-278,-373) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1919, 655) (target was (1641,501)) steps=38
+23:53:48 [7] Click x=1641 y=501
+23:53:49 [7] Wait 1968ms
+23:53:50 [-] About to ClickImage at (981:int, 755:int)
+[CURSOR-DEBUG] target=(981,755) cursor_before=(263, 7) total_delta=(718,748) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1324, 1113) (target was (981,755)) steps=75
+23:53:51 [7] Click x=981 y=755
+23:53:58 [7] Wait 7721ms
+23:53:59 [-] About to ClickImage at (1522:int, 717:int)
+[CURSOR-DEBUG] target=(1522,717) cursor_before=(1324, 1112) total_delta=(198,-395) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1611, 540) (target was (1522,717)) steps=40
+23:53:59 [7] Click x=1522 y=717
