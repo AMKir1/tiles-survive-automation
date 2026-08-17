@@ -60,3 +60,43 @@ def test_abort_after_completed_raises():
 
     with pytest.raises(RuntimeError):
         context.abort()
+
+
+def test_complete_from_idle_raises():
+    context = PlaybackContext()
+
+    with pytest.raises(RuntimeError):
+        context.complete()
+
+
+def test_fail_from_idle_raises():
+    context = PlaybackContext()
+
+    with pytest.raises(RuntimeError):
+        context.fail("error message")
+
+
+def test_abort_from_stopped_raises():
+    context = PlaybackContext()
+    context.start()
+    context.abort()
+
+    with pytest.raises(RuntimeError):
+        context.abort()
+
+
+def test_abort_from_failed_raises():
+    context = PlaybackContext()
+    context.start()
+    context.fail("error message")
+
+    with pytest.raises(RuntimeError):
+        context.abort()
+
+
+def test_abort_from_idle_transitions_to_stopped():
+    context = PlaybackContext()
+
+    context.abort()
+
+    assert context.state == PlaybackState.STOPPED
