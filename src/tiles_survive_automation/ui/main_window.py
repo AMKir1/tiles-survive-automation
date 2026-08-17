@@ -70,15 +70,15 @@ class MainWindow(QMainWindow):
         record_button = QPushButton("Record")
         pause_button = QPushButton("Pause")
         stop_button = QPushButton("Stop")
-        play_button = QPushButton("Play")
+        self._play_button = QPushButton("Play")
 
         record_button.clicked.connect(self._on_record_clicked)
         pause_button.clicked.connect(self._recorder_controller.pause)
         stop_button.clicked.connect(self._recorder_controller.stop)
-        play_button.clicked.connect(self._on_play_clicked)
+        self._play_button.clicked.connect(self._on_play_clicked)
 
         buttons = QHBoxLayout()
-        for button in (record_button, pause_button, stop_button, play_button):
+        for button in (record_button, pause_button, stop_button, self._play_button):
             buttons.addWidget(button)
 
         layout = QVBoxLayout()
@@ -126,9 +126,15 @@ class MainWindow(QMainWindow):
         if hwnd is None or selected < 0:
             return
         rule = self._rule_repository.list_all()[selected]
+        # Guard against re-entrancy: two overlapping Play clicks would spawn two
+        # threads sharing one PlaybackEngine/_result_holder, and the second
+        # run's `finished` would never fire since the QTimer poll already
+        # stopped after the first result.
+        self._play_button.setEnabled(False)
         self._playback_controller.run_async(rule, hwnd)
 
     def _on_playback_finished(self, context) -> None:
+        self._play_button.setEnabled(True)
         if context.state == PlaybackState.COMPLETED:
             self.log_view.appendPlainText("Rule completed")
         elif context.state == PlaybackState.FAILED:
