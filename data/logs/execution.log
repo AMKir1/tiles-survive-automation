@@ -445,3 +445,121 @@ pywintypes.error: (0, 'SetCursorPos', 'No error message is available')
 [CURSOR-DEBUG] target=(1522,717) cursor_before=(1324, 1112) total_delta=(198,-395) button_flag=2
 [CURSOR-DEBUG] cursor_after=(1611, 540) (target was (1522,717)) steps=40
 23:53:59 [7] Click x=1522 y=717
+23:55:11 [-] About to ClickImage at (166:int, 762:int)
+[CURSOR-DEBUG] target=(166,762) cursor_before=(936, 224) total_delta=(-770,538) button_flag=2
+[CURSOR-DEBUG] cursor_after=(0, 1031) (target was (166,762)) steps=78
+23:55:12 [7] Click x=166 y=762
+23:55:13 [7] Wait 1496ms
+23:55:13 [-] About to ClickImage at (1571:int, 263:int)
+[CURSOR-DEBUG] target=(1571,263) cursor_before=(65, 1023) total_delta=(1506,-760) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1919, 0) (target was (1571,263)) steps=151
+23:55:15 [7] Click x=1571 y=263
+23:55:17 [7] Wait 1888ms
+23:55:17 [-] About to ClickImage at (1641:int, 501:int)
+[CURSOR-DEBUG] target=(1641,501) cursor_before=(1916, 0) total_delta=(-275,501) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1504, 751) (target was (1641,501)) steps=51
+23:55:18 [7] Click x=1641 y=501
+23:55:20 [7] Wait 1968ms
+23:55:20 [-] About to ClickImage at (981:int, 755:int)
+[CURSOR-DEBUG] target=(981,755) cursor_before=(1503, 749) total_delta=(-522,6) button_flag=2
+[CURSOR-DEBUG] cursor_after=(765, 686) (target was (981,755)) steps=53
+23:55:21 [7] Click x=981 y=755
+23:55:29 [7] Wait 7721ms
+23:55:29 [-] About to ClickImage at (1116:int, 704:int)
+[CURSOR-DEBUG] target=(1116,704) cursor_before=(1919, 1425) total_delta=(-803,-721) button_flag=2
+[CURSOR-DEBUG] cursor_after=(659, 1164) (target was (1116,704)) steps=81
+23:55:30 [7] Click x=1116 y=704
+00:00:53 [-] About to ClickImage at (1065:int, 542:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(1065,542) cursor_before=(938, 223) total_delta=(127,319) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1128, 702) (target was (1065,542)) steps=32
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:00:54 [8] Click x=1065 y=542
+00:00:56 [8] Wait 1732ms
+00:00:56 [-] About to ClickImage at (160:int, 772:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(160,772) cursor_before=(1128, 702) total_delta=(-968,70) button_flag=2
+[CURSOR-DEBUG] cursor_after=(0, 807) (target was (160,772)) steps=97
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:00:57 [8] Click x=160 y=772
+00:00:58 [8] Wait 1248ms
+00:00:58 [-] About to ClickImage at (295:int, 691:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(295,691) cursor_before=(0, 807) total_delta=(295,-116) button_flag=2
+[CURSOR-DEBUG] cursor_after=(442, 633) (target was (295,691)) steps=30
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:00:59 [8] Click x=295 y=691
+00:01:01 [8] Wait 1976ms
+00:01:01 [-] About to ClickImage at (259:int, 137:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(259,137) cursor_before=(442, 633) total_delta=(-183,-496) button_flag=2
+[CURSOR-DEBUG] cursor_after=(168, 0) (target was (259,137)) steps=50
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:01:02 [8] Click x=259 y=137
+00:01:03 [8] Wait 1224ms
+00:01:03 [-] About to ClickImage at (1014:int, 761:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(1014,761) cursor_before=(168, 0) total_delta=(846,761) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1416, 1123) (target was (1014,761)) steps=85
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:01:04 [8] Click x=1014 y=761
+00:01:08 [8] Wait 4088ms
+00:01:09 [-] About to ClickImage at (818:int, 215:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(818,215) cursor_before=(1070, 187) total_delta=(-252,28) button_flag=2
+[CURSOR-DEBUG] cursor_after=(612, 726) (target was (818,215)) steps=26
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:01:09 [8] Click x=818 y=215
+00:01:16 [-] About to ClickImage at (1065:int, 543:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(1065,543) cursor_before=(949, 227) total_delta=(116,316) button_flag=2
+[CURSOR-DEBUG] cursor_after=(1122, 701) (target was (1065,543)) steps=32
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:01:16 [8] Click x=1065 y=543
+00:01:18 [8] Wait 1732ms
+00:01:18 [-] About to ClickImage at (160:int, 772:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(160,772) cursor_before=(1122, 701) total_delta=(-962,71) button_flag=2
+[CURSOR-DEBUG] cursor_after=(0, 808) (target was (160,772)) steps=97
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:01:19 [8] Click x=160 y=772
+00:01:21 [8] Wait 1248ms
+00:01:21 [-] About to ClickImage at (295:int, 691:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(295,691) cursor_before=(0, 808) total_delta=(295,-117) button_flag=2
+[CURSOR-DEBUG] cursor_after=(442, 633) (target was (295,691)) steps=30
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:01:21 [8] Click x=295 y=691
+00:01:23 [8] Wait 1976ms
+00:01:23 [-] About to ClickImage at (259:int, 137:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(259,137) cursor_before=(1919, 1038) total_delta=(-1660,-901) button_flag=2
+[CURSOR-DEBUG] cursor_after=(248, 0) (target was (259,137)) steps=167
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:01:25 [8] Click x=259 y=137
+00:01:27 [8] Wait 1224ms
+00:01:27 [-] About to ClickImage at (1069:int, 761:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(1069,761) cursor_before=(1366, 0) total_delta=(-297,761) button_flag=2
+[CURSOR-DEBUG] cursor_after=(927, 1121) (target was (1069,761)) steps=77
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:01:28 [8] Click x=1069 y=761
+00:01:32 [8] Wait 4088ms
+00:01:32 [-] About to ClickImage at (887:int, 215:int)
+[CURSOR-DEBUG] [ACCEL-GUARD] get mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] [ACCEL-GUARD] set mouse=[6,10,0] ok=True speed=10 ok=True err=0
+[CURSOR-DEBUG] target=(887,215) cursor_before=(930, 1122) total_delta=(-43,-907) button_flag=2
+[CURSOR-DEBUG] cursor_after=(866, 0) (target was (887,215)) steps=91
+[CURSOR-DEBUG] [ACCEL-GUARD] restore mouse=[6, 10, 1] ok=True speed=10 ok=True err=0
+00:01:33 [8] Click x=887 y=215
