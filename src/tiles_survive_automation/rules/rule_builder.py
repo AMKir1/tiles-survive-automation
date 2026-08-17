@@ -7,7 +7,7 @@ from tiles_survive_automation.rules.models import (
     StrategyType,
 )
 
-_DOUBLE_CLICK_DISTANCE = 5
+_DOUBLE_CLICK_DISTANCE = 20
 
 
 class RuleBuilder:
@@ -107,9 +107,15 @@ class RuleBuilder:
                 and (action["timestamp"] - merged[-1]["timestamp"]) * 1000
                     <= config.DOUBLE_CLICK_INTERVAL_MS
             ):
-                merged[-1] = {**merged[-1], "type": StepType.DOUBLE_CLICK,
-                               "name": "Double Click"}
-                continue
+                # Check if clicks are at the same location
+                distance = max(
+                    abs(action["params"]["relative_x"] - merged[-1]["params"]["relative_x"]),
+                    abs(action["params"]["relative_y"] - merged[-1]["params"]["relative_y"])
+                )
+                if distance * 1000 <= _DOUBLE_CLICK_DISTANCE:
+                    merged[-1] = {**merged[-1], "type": StepType.DOUBLE_CLICK,
+                                   "name": "Double Click"}
+                    continue
             merged.append(action)
         return merged
 

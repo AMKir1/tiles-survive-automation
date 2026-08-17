@@ -109,3 +109,22 @@ def test_two_close_clicks_at_same_spot_merge_into_double_click():
     rule = RuleBuilder("R", None).build(steps)
 
     assert [s.step_type for s in rule.steps] == [StepType.DOUBLE_CLICK]
+
+
+def test_two_close_clicks_at_different_spots_do_not_merge():
+    steps = [
+        _step("mouse_down", 0.0, x=10, y=10, rx=0.1, ry=0.1, button="left",
+              template_path="click_1.png"),
+        _step("mouse_up", 0.02, x=10, y=10, rx=0.1, ry=0.1, button="left"),
+        _step("mouse_down", 0.1, x=300, y=10, rx=0.4, ry=0.1, button="left",
+              template_path="click_2.png"),
+        _step("mouse_up", 0.12, x=300, y=10, rx=0.4, ry=0.1, button="left"),
+    ]
+
+    rule = RuleBuilder("R", None).build(steps)
+
+    assert [s.step_type for s in rule.steps] == [
+        StepType.CLICK_IMAGE, StepType.CLICK_IMAGE
+    ]
+    assert rule.steps[0].params == {"relative_x": 0.1, "relative_y": 0.1}
+    assert rule.steps[1].params == {"relative_x": 0.4, "relative_y": 0.1}
