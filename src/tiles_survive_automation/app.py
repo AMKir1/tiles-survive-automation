@@ -9,6 +9,10 @@ def main() -> None:
         get_execution_logger,
     )
     from tiles_survive_automation.capture.factory import get_screen_capture
+    from tiles_survive_automation.input.factory import (
+        get_input_controller,
+        get_input_recorder,
+    )
     from tiles_survive_automation.storage.database import connect
     from tiles_survive_automation.storage.execution_repository import (
         ExecutionRepository,
@@ -26,32 +30,8 @@ def main() -> None:
     execution_repository = ExecutionRepository(conn)
     logger = get_execution_logger(config.LOGS_DIR / "execution.log")
 
-    if sys.platform == "win32":
-        from tiles_survive_automation.input.pynput_recorder import PynputRecorder
-        from tiles_survive_automation.input.win32_input_controller import (
-            Win32InputController,
-        )
-
-        input_recorder = PynputRecorder()
-        input_controller = Win32InputController()
-    else:
-        from tiles_survive_automation.input.fake_input import FakeInputController
-
-        class _NoOpRecorder:
-            def start(self, on_event):
-                pass
-
-            def pause(self):
-                pass
-
-            def resume(self):
-                pass
-
-            def stop(self):
-                return []
-
-        input_recorder = _NoOpRecorder()
-        input_controller = FakeInputController()
+    input_recorder = get_input_recorder()
+    input_controller = get_input_controller()
 
     app = QApplication(sys.argv)
     window = MainWindow(window_manager, screen_capture, input_recorder,

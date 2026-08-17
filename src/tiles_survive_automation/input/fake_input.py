@@ -1,3 +1,20 @@
+class NoOpInputRecorder:
+    """InputRecorder that does nothing -- used off-Windows where no real
+    keyboard/mouse hooking backend is available."""
+
+    def start(self, on_event) -> None:
+        pass
+
+    def pause(self) -> None:
+        pass
+
+    def resume(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+
 class FakeInputController:
     def __init__(self) -> None:
         self.calls: list[tuple] = []
