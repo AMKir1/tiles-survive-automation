@@ -106,6 +106,37 @@ def _send_key_input(vk_code: int, key_up: bool) -> None:
 _MAX_MOVE_STEP_PX = 10
 _MOVE_STEP_DELAY_S = 0.012
 
+SPI_GETMOUSE = 0x0003
+SPI_SETMOUSE = 0x0004
+SPIF_SENDCHANGE = 0x0002
+
+
+class _PointerAccelerationGuard:
+    """Temporarily disables Windows pointer acceleration ('Enhance pointer
+    precision') for the duration of a `with` block, restoring the user's
+    original setting on exit -- never persisted to the registry (no
+    SPIF_UPDATEINIFILE), so even if restore somehow didn't run, a reboot
+    reverts to the user's real setting.
+
+    Confirmed via cursor_before/after debug logging that acceleration
+    was still distorting relative SendInput moves even after splitting
+    them into small, time-spaced steps: even the OS's own GetCursorPos
+    ended up far from the intended target, occasionally clamped at a
+    screen edge from a modest nominal delta. Disabling acceleration at
+    the source removes the distortion instead of trying to out-guess it
+    with step size/timing.
+    """
+
+    def __enter__(self):
+        self._original = (ctypes.c_int * 3)()
+        _user32.SystemParametersInfoW(SPI_GETMOUSE, 0, self._original, 0)
+        disabled = (ctypes.c_int * 3)(self._original[0], self._original[1], 0)
+        _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, disabled, SPIF_SENDCHANGE)
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, self._original, SPIF_SENDCHANGE)
+
 
 def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) -> None:
     """Move the cursor to (x, y) and optionally fire a button/wheel event
@@ -132,29 +163,30 @@ def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) 
     very fast flick and overshoots. _MOVE_STEP_DELAY_S spaces steps out
     enough that the implied speed stays in a realistic, near-linear range.
     """
-    before = win32api.GetCursorPos()
-    total_dx, total_dy = x - before[0], y - before[1]
-    _debug_log(
-        f"target=({x},{y}) cursor_before={before} total_delta=({total_dx},{total_dy}) "
-        f"button_flag={button_flag}"
-    )
+    with _PointerAccelerationGuard():
+        before = win32api.GetCursorPos()
+        total_dx, total_dy = x - before[0], y - before[1]
+        _debug_log(
+            f"target=({x},{y}) cursor_before={before} total_delta=({total_dx},{total_dy}) "
+            f"button_flag={button_flag}"
+        )
 
-    steps = max(1, max(abs(total_dx), abs(total_dy)) // _MAX_MOVE_STEP_PX + 1)
-    sent_dx = sent_dy = 0
-    for i in range(1, steps + 1):
-        step_x = round(total_dx * i / steps)
-        step_y = round(total_dy * i / steps)
-        dx, dy = step_x - sent_dx, step_y - sent_dy
-        sent_dx, sent_dy = step_x, step_y
-        is_last = i == steps
-        _send_mouse_input(MOUSEEVENTF_MOVE | (button_flag if is_last else 0),
-                           dx, dy, mouse_data if is_last else 0)
-        if not is_last:
-            time.sleep(_MOVE_STEP_DELAY_S)
+        steps = max(1, max(abs(total_dx), abs(total_dy)) // _MAX_MOVE_STEP_PX + 1)
+        sent_dx = sent_dy = 0
+        for i in range(1, steps + 1):
+            step_x = round(total_dx * i / steps)
+            step_y = round(total_dy * i / steps)
+            dx, dy = step_x - sent_dx, step_y - sent_dy
+            sent_dx, sent_dy = step_x, step_y
+            is_last = i == steps
+            _send_mouse_input(MOUSEEVENTF_MOVE | (button_flag if is_last else 0),
+                               dx, dy, mouse_data if is_last else 0)
+            if not is_last:
+                time.sleep(_MOVE_STEP_DELAY_S)
 
-    time.sleep(0.05)
-    after = win32api.GetCursorPos()
-    _debug_log(f"cursor_after={after} (target was ({x},{y})) steps={steps}")
+        time.sleep(0.05)
+        after = win32api.GetCursorPos()
+        _debug_log(f"cursor_after={after} (target was ({x},{y})) steps={steps}")
 
 
 class Win32InputController:
