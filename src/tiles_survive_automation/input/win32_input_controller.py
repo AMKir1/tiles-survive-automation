@@ -8,24 +8,6 @@ if sys.platform != "win32":
 
 import win32api
 
-from tiles_survive_automation import config
-
-_user32 = ctypes.WinDLL("user32", use_last_error=True)
-
-
-def _debug_log(message: str) -> None:
-    """Temporary diagnostic logging while we track down a cursor-movement
-    bug: appends straight to the execution log file so it shows up
-    alongside the app's own logs without needing a logger instance
-    threaded through InputController's constructor."""
-    try:
-        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        with open(config.LOGS_DIR / "execution.log", "a", encoding="utf-8") as f:
-            f.write(f"[CURSOR-DEBUG] {message}\n")
-    except OSError:
-        pass
-
-
 ULONG_PTR = ctypes.c_size_t
 
 INPUT_MOUSE = 0
@@ -52,6 +34,22 @@ _MOUSE_UP_FLAG = {
     "right": MOUSEEVENTF_RIGHTUP,
     "middle": MOUSEEVENTF_MIDDLEUP,
 }
+
+_MAX_MOVE_STEP_PX = 10
+_MOVE_STEP_DELAY_S = 0.012
+
+SPI_GETMOUSE = 0x0003
+SPI_SETMOUSE = 0x0004
+SPI_GETMOUSESPEED = 0x0070
+SPI_SETMOUSESPEED = 0x0071
+SPIF_SENDCHANGE = 0x0002
+
+_user32 = ctypes.WinDLL("user32", use_last_error=True)
+_user32.SystemParametersInfoW.restype = wintypes.BOOL
+_user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT,
+                                            ctypes.c_void_p, wintypes.UINT]
+_user32.GetDpiForSystem.restype = wintypes.UINT
+_user32.GetDpiForSystem.argtypes = []
 
 
 class MOUSEINPUT(ctypes.Structure):
@@ -103,85 +101,44 @@ def _send_key_input(vk_code: int, key_up: bool) -> None:
         raise ctypes.WinError(ctypes.get_last_error())
 
 
-_MAX_MOVE_STEP_PX = 10
-_MOVE_STEP_DELAY_S = 0.012
-
-SPI_GETMOUSE = 0x0003
-SPI_SETMOUSE = 0x0004
-SPI_GETMOUSESPEED = 0x0070
-SPI_SETMOUSESPEED = 0x0071
-SPIF_SENDCHANGE = 0x0002
-
-_user32.SystemParametersInfoW.restype = wintypes.BOOL
-_user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT,
-                                            ctypes.c_void_p, wintypes.UINT]
-_user32.GetDpiForSystem.restype = wintypes.UINT
-_user32.GetDpiForSystem.argtypes = []
-
-
 class _PointerAccelerationGuard:
-    """Temporarily disables Windows pointer acceleration ('Enhance pointer
-    precision', SPI_SETMOUSE's 3rd value) AND resets pointer speed
-    (SPI_SETMOUSESPEED, the separate 'Mouse pointer speed' slider -- a
-    plain linear multiplier applied to relative deltas independent of the
-    acceleration curve) to the neutral default of 10 for the duration of
-    a `with` block, restoring the user's original values on exit -- never
-    persisted to the registry (no SPIF_UPDATEINIFILE), so even if restore
-    somehow didn't run, a reboot reverts to the user's real settings.
+    """Temporarily zeroes Windows pointer acceleration and resets pointer
+    speed to the neutral default (10) for a `with` block, restoring the
+    user's real settings on exit. Never persisted to the registry, so a
+    reboot alone would revert it even if restore didn't run.
 
-    Every SystemParametersInfoW call's success/failure and GetLastError
-    are logged: a prior version of this guard silently did nothing
-    (unchecked return value) while cursor moves kept landing exactly as
-    distorted as before it existed -- this instrumentation exists to
-    catch that class of bug happening again.
+    Needed because relative SendInput deltas go through the same
+    acceleration curve and speed multiplier as a real mouse -- without
+    this, our deliberately small, evenly-spaced move increments still get
+    distorted.
     """
 
     def __enter__(self):
         self._original_mouse = (ctypes.c_int * 3)()
-        ok1 = _user32.SystemParametersInfoW(SPI_GETMOUSE, 0, self._original_mouse, 0)
+        _user32.SystemParametersInfoW(SPI_GETMOUSE, 0, self._original_mouse, 0)
         self._original_speed = ctypes.c_int()
-        ok2 = _user32.SystemParametersInfoW(SPI_GETMOUSESPEED, 0,
-                                              ctypes.byref(self._original_speed), 0)
-        _debug_log(
-            f"[ACCEL-GUARD] get mouse={list(self._original_mouse)} ok={bool(ok1)} "
-            f"speed={self._original_speed.value} ok={bool(ok2)} "
-            f"err={ctypes.get_last_error()}"
-        )
+        _user32.SystemParametersInfoW(SPI_GETMOUSESPEED, 0,
+                                       ctypes.byref(self._original_speed), 0)
 
         disabled = (ctypes.c_int * 3)(self._original_mouse[0], self._original_mouse[1], 0)
-        ok3 = _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, disabled, SPIF_SENDCHANGE)
-        ok4 = _user32.SystemParametersInfoW(SPI_SETMOUSESPEED, 0,
-                                              ctypes.c_void_p(10), SPIF_SENDCHANGE)
-        _debug_log(
-            f"[ACCEL-GUARD] set mouse=[{disabled[0]},{disabled[1]},0] ok={bool(ok3)} "
-            f"speed=10 ok={bool(ok4)} err={ctypes.get_last_error()}"
-        )
+        _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, disabled, SPIF_SENDCHANGE)
+        _user32.SystemParametersInfoW(SPI_SETMOUSESPEED, 0, ctypes.c_void_p(10),
+                                       SPIF_SENDCHANGE)
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        ok1 = _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, self._original_mouse,
-                                              SPIF_SENDCHANGE)
-        ok2 = _user32.SystemParametersInfoW(
+        _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, self._original_mouse, SPIF_SENDCHANGE)
+        _user32.SystemParametersInfoW(
             SPI_SETMOUSESPEED, 0, ctypes.c_void_p(self._original_speed.value),
             SPIF_SENDCHANGE)
-        _debug_log(
-            f"[ACCEL-GUARD] restore mouse={list(self._original_mouse)} ok={bool(ok1)} "
-            f"speed={self._original_speed.value} ok={bool(ok2)} "
-            f"err={ctypes.get_last_error()}"
-        )
 
 
 def _dpi_scale() -> float:
-    """Ratio between logical pixels (what GetCursorPos/GetClientRect
-    report when the process isn't reliably per-monitor-DPI-aware) and
-    physical pixels (what SendInput's relative MOUSEEVENTF_MOVE deltas
-    actually move the cursor by). Confirmed empirically: with a target
-    delta of e.g. (127, 319) computed from GetCursorPos-based coordinates,
-    the cursor consistently ended up ~1.5x farther in both axes -- a
-    clean match for 150% Windows display scaling (144 DPI / 96 = 1.5),
-    not the acceleration curve (already independently confirmed disabled
-    via _PointerAccelerationGuard's ok=True logging) or a coincidence.
-    """
+    """GetCursorPos/GetClientRect report logical pixels; SendInput's
+    relative MOUSEEVENTF_MOVE deltas move the cursor in physical pixels.
+    At 150% display scaling that's a 1.5x mismatch, so relative deltas
+    computed from logical coordinates must be divided by this scale
+    before being sent."""
     dpi = _user32.GetDpiForSystem()
     return dpi / 96.0 if dpi else 1.0
 
@@ -189,38 +146,21 @@ def _dpi_scale() -> float:
 def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) -> None:
     """Move the cursor to (x, y) and optionally fire a button/wheel event
     on the final step, using RELATIVE deltas from the current cursor
-    position (not MOUSEEVENTF_ABSOLUTE) broken into many small increments.
+    position rather than MOUSEEVENTF_ABSOLUTE.
 
-    MOUSEEVENTF_ABSOLUTE teleports the OS-tracked cursor position (visible
-    in GetCursorPos) but does not generate the relative-delta events that
-    games reading raw/relative mouse input listen to -- many games hide
-    the system cursor and render their own, driven entirely by relative
-    deltas. Confirmed on this project: GetCursorPos matched the target
-    exactly after an absolute move, but the in-game cursor barely moved
-    and clicks landed on nothing.
-
-    A single huge relative delta isn't enough either: Windows applies
-    pointer-acceleration ("Enhance pointer precision") to MOUSEEVENTF_MOVE
-    deltas, which non-linearly distorts one big jump -- confirmed by
-    clicks landing "somewhere completely unrelated" to the target. A real
-    mouse never reports one giant delta; it reports many small ones per
-    second. Splitting the move into <= _MAX_MOVE_STEP_PX-sized increments
-    fixed the gross distortion, but the acceleration curve keys off
-    IMPLIED VELOCITY (delta / time-since-last-event), not just delta size
-    -- sending small steps too close together in time still reads as a
-    very fast flick and overshoots. _MOVE_STEP_DELAY_S spaces steps out
-    enough that the implied speed stays in a realistic, near-linear range.
+    Absolute positioning teleports the OS-tracked cursor (GetCursorPos
+    reflects it correctly) but doesn't generate the relative-delta events
+    that games reading raw/relative mouse input listen to -- many games
+    hide the system cursor and render their own, driven purely by deltas.
+    The move is split into small, evenly-time-spaced increments (real
+    mouse hardware never reports one giant delta) and DPI/acceleration
+    are compensated for -- see _dpi_scale and _PointerAccelerationGuard.
     """
     with _PointerAccelerationGuard():
         before = win32api.GetCursorPos()
         scale = _dpi_scale()
-        raw_dx, raw_dy = x - before[0], y - before[1]
-        total_dx, total_dy = round(raw_dx / scale), round(raw_dy / scale)
-        _debug_log(
-            f"target=({x},{y}) cursor_before={before} dpi_scale={scale} "
-            f"raw_delta=({raw_dx},{raw_dy}) scaled_delta=({total_dx},{total_dy}) "
-            f"button_flag={button_flag}"
-        )
+        total_dx = round((x - before[0]) / scale)
+        total_dy = round((y - before[1]) / scale)
 
         steps = max(1, max(abs(total_dx), abs(total_dy)) // _MAX_MOVE_STEP_PX + 1)
         sent_dx = sent_dy = 0
@@ -236,8 +176,6 @@ def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) 
                 time.sleep(_MOVE_STEP_DELAY_S)
 
         time.sleep(0.05)
-        after = win32api.GetCursorPos()
-        _debug_log(f"cursor_after={after} (target was ({x},{y})) steps={steps}")
 
 
 class Win32InputController:
