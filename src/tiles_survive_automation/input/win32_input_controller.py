@@ -108,34 +108,65 @@ _MOVE_STEP_DELAY_S = 0.012
 
 SPI_GETMOUSE = 0x0003
 SPI_SETMOUSE = 0x0004
+SPI_GETMOUSESPEED = 0x0070
+SPI_SETMOUSESPEED = 0x0071
 SPIF_SENDCHANGE = 0x0002
+
+_user32.SystemParametersInfoW.restype = wintypes.BOOL
+_user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT,
+                                            ctypes.c_void_p, wintypes.UINT]
 
 
 class _PointerAccelerationGuard:
     """Temporarily disables Windows pointer acceleration ('Enhance pointer
-    precision') for the duration of a `with` block, restoring the user's
-    original setting on exit -- never persisted to the registry (no
-    SPIF_UPDATEINIFILE), so even if restore somehow didn't run, a reboot
-    reverts to the user's real setting.
+    precision', SPI_SETMOUSE's 3rd value) AND resets pointer speed
+    (SPI_SETMOUSESPEED, the separate 'Mouse pointer speed' slider -- a
+    plain linear multiplier applied to relative deltas independent of the
+    acceleration curve) to the neutral default of 10 for the duration of
+    a `with` block, restoring the user's original values on exit -- never
+    persisted to the registry (no SPIF_UPDATEINIFILE), so even if restore
+    somehow didn't run, a reboot reverts to the user's real settings.
 
-    Confirmed via cursor_before/after debug logging that acceleration
-    was still distorting relative SendInput moves even after splitting
-    them into small, time-spaced steps: even the OS's own GetCursorPos
-    ended up far from the intended target, occasionally clamped at a
-    screen edge from a modest nominal delta. Disabling acceleration at
-    the source removes the distortion instead of trying to out-guess it
-    with step size/timing.
+    Every SystemParametersInfoW call's success/failure and GetLastError
+    are logged: a prior version of this guard silently did nothing
+    (unchecked return value) while cursor moves kept landing exactly as
+    distorted as before it existed -- this instrumentation exists to
+    catch that class of bug happening again.
     """
 
     def __enter__(self):
-        self._original = (ctypes.c_int * 3)()
-        _user32.SystemParametersInfoW(SPI_GETMOUSE, 0, self._original, 0)
-        disabled = (ctypes.c_int * 3)(self._original[0], self._original[1], 0)
-        _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, disabled, SPIF_SENDCHANGE)
+        self._original_mouse = (ctypes.c_int * 3)()
+        ok1 = _user32.SystemParametersInfoW(SPI_GETMOUSE, 0, self._original_mouse, 0)
+        self._original_speed = ctypes.c_int()
+        ok2 = _user32.SystemParametersInfoW(SPI_GETMOUSESPEED, 0,
+                                              ctypes.byref(self._original_speed), 0)
+        _debug_log(
+            f"[ACCEL-GUARD] get mouse={list(self._original_mouse)} ok={bool(ok1)} "
+            f"speed={self._original_speed.value} ok={bool(ok2)} "
+            f"err={ctypes.get_last_error()}"
+        )
+
+        disabled = (ctypes.c_int * 3)(self._original_mouse[0], self._original_mouse[1], 0)
+        ok3 = _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, disabled, SPIF_SENDCHANGE)
+        ok4 = _user32.SystemParametersInfoW(SPI_SETMOUSESPEED, 0,
+                                              ctypes.c_void_p(10), SPIF_SENDCHANGE)
+        _debug_log(
+            f"[ACCEL-GUARD] set mouse=[{disabled[0]},{disabled[1]},0] ok={bool(ok3)} "
+            f"speed=10 ok={bool(ok4)} err={ctypes.get_last_error()}"
+        )
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, self._original, SPIF_SENDCHANGE)
+        ok1 = _user32.SystemParametersInfoW(SPI_SETMOUSE, 0, self._original_mouse,
+                                              SPIF_SENDCHANGE)
+        ok2 = _user32.SystemParametersInfoW(
+            SPI_SETMOUSESPEED, 0, ctypes.c_void_p(self._original_speed.value),
+            SPIF_SENDCHANGE)
+        _debug_log(
+            f"[ACCEL-GUARD] restore mouse={list(self._original_mouse)} ok={bool(ok1)} "
+            f"speed={self._original_speed.value} ok={bool(ok2)} "
+            f"err={ctypes.get_last_error()}"
+        )
 
 
 def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) -> None:
