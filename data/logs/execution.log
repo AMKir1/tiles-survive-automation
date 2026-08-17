@@ -14,3 +14,105 @@ Traceback (most recent call last):
     win32api.SetCursorPos((x, y))
     ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
 pywintypes.error: (0, 'SetCursorPos', 'No error message is available')
+22:54:26 [-] About to ClickImage at (946:int, 198:int)
+22:54:26 [атака мелких 2] Click x=946 y=198
+22:54:37 [атака мелких 2] Wait 11328ms
+22:54:37 [-] About to ClickImage at (828:int, 198:int)
+22:54:38 [атака мелких 2] Click x=828 y=198
+22:55:02 [-] About to ClickImage at (955:int, 218:int)
+22:55:02 [атака мелких 2] Click x=955 y=218
+22:55:14 [атака мелких 2] Wait 11328ms
+22:55:14 [-] About to ClickImage at (847:int, 218:int)
+22:55:14 [атака мелких 2] Click x=847 y=218
+22:55:17 [-] About to ClickImage at (955:int, 218:int)
+22:55:17 [атака мелких 2] Click x=955 y=218
+22:55:28 [атака мелких 2] Wait 11328ms
+22:55:29 [-] About to ClickImage at (828:int, 198:int)
+22:55:29 [атака мелких 2] Click x=828 y=198
+22:58:43 [-] About to ClickImage at (946:int, 198:int)
+22:58:43 [атака мелких 2] Click x=946 y=198
+22:58:54 [атака мелких 2] Wait 11328ms
+22:58:54 [-] About to ClickImage at (847:int, 218:int)
+22:58:54 [атака мелких 2] Click x=847 y=218
+22:59:05 [-] About to ClickImage at (955:int, 218:int)
+22:59:05 [атака мелких 2] step 'Click' raised an exception: (0, 'SetCursorPos', 'No error message is available')
+Traceback (most recent call last):
+  File "C:\Users\amkir\PycharmProjects\tiles-survive-automation\src\tiles_survive_automation\playback\engine.py", line 63, in run
+    outcome = self._execute_step(step, hwnd)
+  File "C:\Users\amkir\PycharmProjects\tiles-survive-automation\src\tiles_survive_automation\playback\engine.py", line 152, in _execute_step
+    self._input_controller.click(abs_x, abs_y)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\amkir\PycharmProjects\tiles-survive-automation\src\tiles_survive_automation\input\win32_input_controller.py", line 28, in click
+    win32api.SetCursorPos((x, y))
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+pywintypes.error: (0, 'SetCursorPos', 'No error message is available')
+23:04:23 [-] About to ClickImage at (955:int, 218:int)
+23:04:23 [атака мелких 2] Click x=955 y=218
+23:04:35 [атака мелких 2] Wait 11328ms
+23:04:35 [-] About to ClickImage at (847:int, 218:int)
+23:04:35 [атака мелких 2] Click x=847 y=218
+23:05:21 [-] About to ClickImage at (837:int, 219:int)
+23:05:21 [Атака мелких 3] Click x=837 y=219
+23:06:47 [-] About to ClickImage at (837:int, 219:int)
+23:06:47 [Атака мелких 3] Click x=837 y=219
+23:07:03 [-] About to ClickImage at (837:int, 219:int)
+23:07:03 [Атака мелких 3] Click x=837 y=219
+23:08:24 [-] About to ClickImage at (837:int, 219:int)
+23:08:24 [Атака мелких 3] Click x=837 y=219
+23:11:45 [-] About to ClickImage at (652:int, 600:int)
+23:11:46 [Атака мелких 3] Click x=652 y=600
+23:11:56 [-] About to ClickImage at (955:int, 218:int)
+23:11:57 [атака мелких 2] Click x=955 y=218
+23:12:08 [атака мелких 2] Wait 11328ms
+23:12:08 [-] About to ClickImage at (847:int, 218:int)
+23:12:08 [атака мелких 2] Click x=847 y=218
+23:12:10 [-] About to ClickImage at (837:int, 219:int)
+23:12:10 [Атака мелких 3] Click x=837 y=219
+23:12:30 [-] About to ClickImage at (837:int, 219:int)
+23:12:30 [Атака мелких 3] Click x=837 y=219
+23:13:13 [-] About to ClickImage at (837:int, 219:int)
+23:13:13 [Атака мелких 3] Click x=837 y=219
+23:13:46 [-] About to ClickImage at (837:int, 219:int)
+23:13:46 [Атака мелких 3] Click x=837 y=219
+23:13:55 [-] About to ClickImage at (955:int, 218:int)
+23:13:55 [атака мелких 2] Click x=955 y=218
+23:14:06 [атака мелких 2] Wait 11328ms
+23:14:07 [-] About to ClickImage at (652:int, 601:int)
+23:14:07 [атака мелких 2] Click x=652 y=601
+23:14:23 [-] About to ClickImage at (837:int, 219:int)
+23:14:23 [Атака мелких 3] Click x=837 y=219
+23:14:53 [-] About to ClickImage at (837:int, 219:int)
+23:14:53 [Атака мелких 3] Click x=837 y=219
+23:17:34 [-] About to ClickImage at (652:int, 600:int)
+23:17:34 [Атака мелких 3] Click x=652 y=600
+23:18:54 [-] About to ClickImage at (652:int, 600:int)
+23:18:54 [Атака мелких 3] Click x=652 y=600
+23:19:26 [-] About to ClickImage at (817:int, 199:int)
+[CURSOR-DEBUG] target=(817,199) normalized=(27901,8182) virtual_screen=(left=0,top=0,w=1920,h=1595) button_flag=2 cursor_before=(947, 226)
+[CURSOR-DEBUG] cursor_after=(817, 199) (target was (817,199))
+23:19:26 [Атака мелких 3] Click x=817 y=199
+23:19:37 [-] About to ClickImage at (837:int, 219:int)
+[CURSOR-DEBUG] target=(837,219) normalized=(28584,9004) virtual_screen=(left=0,top=0,w=1920,h=1595) button_flag=2 cursor_before=(963, 219)
+[CURSOR-DEBUG] cursor_after=(837, 219) (target was (837,219))
+23:19:37 [Атака мелких 3] Click x=837 y=219
+23:19:47 [-] About to ClickImage at (837:int, 219:int)
+[CURSOR-DEBUG] target=(837,219) normalized=(28584,9004) virtual_screen=(left=0,top=0,w=1920,h=1595) button_flag=2 cursor_before=(944, 218)
+[CURSOR-DEBUG] cursor_after=(837, 219) (target was (837,219))
+23:19:47 [Атака мелких 3] Click x=837 y=219
+23:19:52 [-] About to ClickImage at (837:int, 219:int)
+[CURSOR-DEBUG] target=(837,219) normalized=(28584,9004) virtual_screen=(left=0,top=0,w=1920,h=1595) button_flag=2 cursor_before=(963, 217)
+[CURSOR-DEBUG] cursor_after=(837, 219) (target was (837,219))
+23:19:52 [Атака мелких 3] Click x=837 y=219
+23:20:01 [-] About to ClickImage at (837:int, 219:int)
+[CURSOR-DEBUG] target=(837,219) normalized=(28584,9004) virtual_screen=(left=0,top=0,w=1920,h=1595) button_flag=2 cursor_before=(957, 218)
+[CURSOR-DEBUG] cursor_after=(837, 219) (target was (837,219))
+23:20:01 [Атака мелких 3] Click x=837 y=219
+23:20:08 [-] About to ClickImage at (955:int, 218:int)
+[CURSOR-DEBUG] target=(955,218) normalized=(32614,8963) virtual_screen=(left=0,top=0,w=1920,h=1595) button_flag=2 cursor_before=(932, 220)
+[CURSOR-DEBUG] cursor_after=(955, 218) (target was (955,218))
+23:20:08 [атака мелких 2] Click x=955 y=218
+23:20:19 [атака мелких 2] Wait 11328ms
+23:20:19 [-] About to ClickImage at (847:int, 218:int)
+[CURSOR-DEBUG] target=(847,218) normalized=(28926,8963) virtual_screen=(left=0,top=0,w=1920,h=1595) button_flag=2 cursor_before=(1391, 63)
+[CURSOR-DEBUG] cursor_after=(847, 218) (target was (847,218))
+23:20:20 [атака мелких 2] Click x=847 y=218
