@@ -115,6 +115,8 @@ SPIF_SENDCHANGE = 0x0002
 _user32.SystemParametersInfoW.restype = wintypes.BOOL
 _user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT,
                                             ctypes.c_void_p, wintypes.UINT]
+_user32.GetDpiForSystem.restype = wintypes.UINT
+_user32.GetDpiForSystem.argtypes = []
 
 
 class _PointerAccelerationGuard:
@@ -169,6 +171,21 @@ class _PointerAccelerationGuard:
         )
 
 
+def _dpi_scale() -> float:
+    """Ratio between logical pixels (what GetCursorPos/GetClientRect
+    report when the process isn't reliably per-monitor-DPI-aware) and
+    physical pixels (what SendInput's relative MOUSEEVENTF_MOVE deltas
+    actually move the cursor by). Confirmed empirically: with a target
+    delta of e.g. (127, 319) computed from GetCursorPos-based coordinates,
+    the cursor consistently ended up ~1.5x farther in both axes -- a
+    clean match for 150% Windows display scaling (144 DPI / 96 = 1.5),
+    not the acceleration curve (already independently confirmed disabled
+    via _PointerAccelerationGuard's ok=True logging) or a coincidence.
+    """
+    dpi = _user32.GetDpiForSystem()
+    return dpi / 96.0 if dpi else 1.0
+
+
 def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) -> None:
     """Move the cursor to (x, y) and optionally fire a button/wheel event
     on the final step, using RELATIVE deltas from the current cursor
@@ -196,9 +213,12 @@ def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) 
     """
     with _PointerAccelerationGuard():
         before = win32api.GetCursorPos()
-        total_dx, total_dy = x - before[0], y - before[1]
+        scale = _dpi_scale()
+        raw_dx, raw_dy = x - before[0], y - before[1]
+        total_dx, total_dy = round(raw_dx / scale), round(raw_dy / scale)
         _debug_log(
-            f"target=({x},{y}) cursor_before={before} total_delta=({total_dx},{total_dy}) "
+            f"target=({x},{y}) cursor_before={before} dpi_scale={scale} "
+            f"raw_delta=({raw_dx},{raw_dy}) scaled_delta=({total_dx},{total_dy}) "
             f"button_flag={button_flag}"
         )
 
