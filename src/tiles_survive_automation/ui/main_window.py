@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QListWidget,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -21,6 +22,9 @@ from tiles_survive_automation.ui.controllers.playback_controller import (
 )
 from tiles_survive_automation.ui.controllers.recorder_controller import (
     RecorderController,
+)
+from tiles_survive_automation.ui.controllers.schedule_controller import (
+    ScheduleController,
 )
 
 
@@ -48,10 +52,16 @@ class MainWindow(QMainWindow):
         self._playback_controller = PlaybackController(playback_engine)
         self._playback_controller.finished.connect(self._on_playback_finished)
 
-        # Wired to playback_controller.abort (not a no-op) so F9 actually
-        # interrupts the currently running rule, per spec section 10.
+        self._schedule_controller = ScheduleController(self._playback_controller)
+        self._schedule_controller.progress.connect(self._on_schedule_progress)
+        self._schedule_controller.finished.connect(self._on_schedule_finished)
+
+        # Wired to abort the current run AND halt any active schedule (not a
+        # no-op) so F9 actually interrupts everything in flight, per spec
+        # section 10 -- including a schedule sitting in its inter-batch pause,
+        # where there's no in-progress run for abort() alone to catch.
         self._emergency_stop = EmergencyStop(input_controller,
-                                              on_trigger=self._playback_controller.abort,
+                                              on_trigger=self._on_emergency_stop_triggered,
                                               hotkey=config.EMERGENCY_STOP_KEY)
         if start_emergency_stop:
             self._emergency_stop.start()
@@ -71,20 +81,33 @@ class MainWindow(QMainWindow):
         pause_button = QPushButton("Pause")
         stop_button = QPushButton("Stop")
         self._play_button = QPushButton("Play")
+        self._schedule_button = QPushButton("Schedule")
 
         record_button.clicked.connect(self._on_record_clicked)
         pause_button.clicked.connect(self._recorder_controller.pause)
         stop_button.clicked.connect(self._recorder_controller.stop)
         self._play_button.clicked.connect(self._on_play_clicked)
+        self._schedule_button.clicked.connect(self._on_schedule_clicked)
 
         buttons = QHBoxLayout()
-        for button in (record_button, pause_button, stop_button, self._play_button):
+        for button in (record_button, pause_button, stop_button, self._play_button,
+                       self._schedule_button):
             buttons.addWidget(button)
+
+        rename_button = QPushButton("Rename")
+        delete_button = QPushButton("Delete")
+        rename_button.clicked.connect(self._on_rename_clicked)
+        delete_button.clicked.connect(self._on_delete_clicked)
+
+        rule_buttons = QHBoxLayout()
+        rule_buttons.addWidget(rename_button)
+        rule_buttons.addWidget(delete_button)
 
         layout = QVBoxLayout()
         layout.addWidget(self.window_combo)
         layout.addLayout(buttons)
         layout.addWidget(self.rule_list)
+        layout.addLayout(rule_buttons)
         layout.addWidget(self.log_view)
 
         container = QWidget()
@@ -104,6 +127,16 @@ class MainWindow(QMainWindow):
     def _current_hwnd(self) -> int | None:
         return self.window_combo.currentData()
 
+    def _selected_rule(self):
+        selected = self.rule_list.currentRow()
+        if selected < 0:
+            return None
+        return self._rule_repository.list_all()[selected]
+
+    def _set_running_buttons_enabled(self, enabled: bool) -> None:
+        self._play_button.setEnabled(enabled)
+        self._schedule_button.setEnabled(enabled)
+
     def _on_record_clicked(self) -> None:
         hwnd = self._current_hwnd()
         if hwnd is not None:
@@ -122,22 +155,83 @@ class MainWindow(QMainWindow):
 
     def _on_play_clicked(self) -> None:
         hwnd = self._current_hwnd()
-        selected = self.rule_list.currentRow()
-        if hwnd is None or selected < 0:
+        rule = self._selected_rule()
+        if hwnd is None or rule is None:
             return
-        rule = self._rule_repository.list_all()[selected]
-        # Guard against re-entrancy: two overlapping Play clicks would spawn two
-        # threads sharing one PlaybackEngine/_result_holder, and the second
-        # run's `finished` would never fire since the QTimer poll already
-        # stopped after the first result.
-        self._play_button.setEnabled(False)
+        # Guard against re-entrancy: two overlapping Play/Schedule runs would
+        # spawn two threads sharing one PlaybackEngine/_result_holder, and the
+        # second run's `finished` would never fire since the QTimer poll
+        # already stopped after the first result.
+        self._set_running_buttons_enabled(False)
         self._playback_controller.run_async(rule, hwnd)
 
     def _on_playback_finished(self, context) -> None:
-        self._play_button.setEnabled(True)
+        if self._schedule_controller.is_active():
+            # This run is part of an active schedule; ScheduleController's own
+            # progress/finished signals handle logging and button state.
+            return
+        self._set_running_buttons_enabled(True)
         if context.state == PlaybackState.COMPLETED:
             self.log_view.appendPlainText("Rule completed")
         elif context.state == PlaybackState.FAILED:
             self.log_view.appendPlainText(f"Rule failed: {context.error_message}")
         else:
             self.log_view.appendPlainText("Rule stopped")
+
+    def _on_schedule_clicked(self) -> None:
+        hwnd = self._current_hwnd()
+        rule = self._selected_rule()
+        if hwnd is None or rule is None:
+            return
+
+        total_runs, ok = QInputDialog.getInt(self, "Schedule", "Total runs:", 100, 1, 100000)
+        if not ok:
+            return
+        batch_size, ok = QInputDialog.getInt(self, "Schedule", "Batch size:", 5, 1, total_runs)
+        if not ok:
+            return
+        interval_minutes, ok = QInputDialog.getInt(
+            self, "Schedule", "Pause between batches (minutes):", 2, 0, 1440)
+        if not ok:
+            return
+
+        self._set_running_buttons_enabled(False)
+        self._schedule_controller.start(rule, hwnd, total_runs, batch_size,
+                                          interval_minutes * 60_000)
+
+    def _on_schedule_progress(self, completed: int, total: int, batch_index: int,
+                                batch_count: int) -> None:
+        self.log_view.appendPlainText(
+            f"Schedule: batch {batch_index}/{batch_count}, run {completed}/{total}")
+
+    def _on_schedule_finished(self, reason: str) -> None:
+        self._set_running_buttons_enabled(True)
+        self.log_view.appendPlainText(f"Schedule {reason}")
+
+    def _on_emergency_stop_triggered(self) -> None:
+        self._playback_controller.abort()
+        self._schedule_controller.stop()
+
+    def _on_rename_clicked(self) -> None:
+        rule = self._selected_rule()
+        if rule is None:
+            return
+        new_name, ok = QInputDialog.getText(self, "Rename Rule", "New name:", text=rule.name)
+        if not ok or not new_name:
+            return
+        rule.name = new_name
+        self._rule_repository.save(rule)
+        self._refresh_rules()
+
+    def _on_delete_clicked(self) -> None:
+        rule = self._selected_rule()
+        if rule is None:
+            return
+        confirm = QMessageBox.question(
+            self, "Delete Rule", f"Delete rule '{rule.name}'?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        self._rule_repository.delete(rule.id)
+        self._refresh_rules()

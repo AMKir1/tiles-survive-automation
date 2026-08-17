@@ -1,3 +1,5 @@
+from PySide6.QtWidgets import QInputDialog, QMessageBox
+
 from tiles_survive_automation.app_logging.structured_logger import get_execution_logger
 from tiles_survive_automation.capture.fake_capture import FakeScreenCapture
 from tiles_survive_automation.input.fake_input import FakeInputController
@@ -10,6 +12,40 @@ from tiles_survive_automation.window.fake_window_manager import FakeWindowManage
 from tiles_survive_automation.window.ports import WindowInfo
 
 import numpy as np
+
+
+def _make_window(qtbot, tmp_path, rule_repository=None, execution_repository=None,
+                  input_controller=None):
+    window_manager = FakeWindowManager(
+        [WindowInfo(hwnd=1, title="Tiles Survive", client_rect=(0, 0, 800, 600))]
+    )
+    rule_repository = rule_repository or RuleRepository(connect(":memory:"))
+    execution_repository = execution_repository or ExecutionRepository(connect(":memory:"))
+    logger = get_execution_logger(tmp_path / "execution.log")
+
+    window = MainWindow(
+        window_manager=window_manager,
+        screen_capture=FakeScreenCapture(np.zeros((600, 800, 3), dtype="uint8")),
+        input_recorder=ScriptedRecorder(),
+        input_controller=input_controller or FakeInputController(),
+        rule_repository=rule_repository,
+        execution_repository=execution_repository,
+        logger=logger,
+        templates_dir=tmp_path / "templates",
+        screenshots_dir=tmp_path / "screenshots",
+        start_emergency_stop=False,
+    )
+    qtbot.addWidget(window)
+    return window, rule_repository
+
+
+def _make_rule(name="R"):
+    step = RuleStep(id=None, order_index=0, step_type=StepType.CLICK_IMAGE, name="Click",
+                     enabled=True, params={"relative_x": 0.5, "relative_y": 0.5},
+                     template_path=None, confidence_threshold=0.9,
+                     strategy=StrategyType.RELATIVE_ONLY, verification=None,
+                     screenshot_path=None, delay_after_ms=0)
+    return Rule(id=None, name=name, description=None, window_title_hint=None, steps=[step])
 
 
 class ScriptedRecorder:
@@ -119,3 +155,75 @@ def test_play_button_disabled_during_playback_and_reenabled_when_finished(qtbot,
         assert not window._play_button.isEnabled()
 
     assert window._play_button.isEnabled()
+
+
+def test_rename_button_updates_rule_name(qtbot, tmp_path, monkeypatch):
+    rule_repository = RuleRepository(connect(":memory:"))
+    rule_repository.save(_make_rule("Old Name"))
+    window, rule_repository = _make_window(qtbot, tmp_path, rule_repository=rule_repository)
+
+    window.rule_list.setCurrentRow(0)
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("New Name", True))
+
+    window._on_rename_clicked()
+
+    assert window.rule_list.item(0).text() == "New Name"
+    assert rule_repository.list_all()[0].name == "New Name"
+
+
+def test_rename_button_cancelled_leaves_rule_unchanged(qtbot, tmp_path, monkeypatch):
+    rule_repository = RuleRepository(connect(":memory:"))
+    rule_repository.save(_make_rule("Old Name"))
+    window, rule_repository = _make_window(qtbot, tmp_path, rule_repository=rule_repository)
+
+    window.rule_list.setCurrentRow(0)
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("New Name", False))
+
+    window._on_rename_clicked()
+
+    assert rule_repository.list_all()[0].name == "Old Name"
+
+
+def test_delete_button_removes_rule_after_confirmation(qtbot, tmp_path, monkeypatch):
+    rule_repository = RuleRepository(connect(":memory:"))
+    rule_repository.save(_make_rule("R"))
+    window, rule_repository = _make_window(qtbot, tmp_path, rule_repository=rule_repository)
+
+    window.rule_list.setCurrentRow(0)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+
+    window._on_delete_clicked()
+
+    assert window.rule_list.count() == 0
+    assert rule_repository.list_all() == []
+
+
+def test_delete_button_declined_confirmation_keeps_rule(qtbot, tmp_path, monkeypatch):
+    rule_repository = RuleRepository(connect(":memory:"))
+    rule_repository.save(_make_rule("R"))
+    window, rule_repository = _make_window(qtbot, tmp_path, rule_repository=rule_repository)
+
+    window.rule_list.setCurrentRow(0)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.No)
+
+    window._on_delete_clicked()
+
+    assert window.rule_list.count() == 1
+    assert len(rule_repository.list_all()) == 1
+
+
+def test_schedule_button_disables_play_and_schedule_until_finished(qtbot, tmp_path, monkeypatch):
+    rule_repository = RuleRepository(connect(":memory:"))
+    rule_repository.save(_make_rule("R"))
+    window, rule_repository = _make_window(qtbot, tmp_path, rule_repository=rule_repository)
+
+    window.rule_list.setCurrentRow(0)
+    monkeypatch.setattr(QInputDialog, "getInt", lambda *a, **k: (1, True))
+
+    with qtbot.waitSignal(window._schedule_controller.finished, timeout=2000):
+        window._on_schedule_clicked()
+        assert not window._play_button.isEnabled()
+        assert not window._schedule_button.isEnabled()
+
+    assert window._play_button.isEnabled()
+    assert window._schedule_button.isEnabled()
