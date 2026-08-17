@@ -25,6 +25,7 @@ def _debug_log(message: str) -> None:
     except OSError:
         pass
 
+
 ULONG_PTR = ctypes.c_size_t
 
 INPUT_MOUSE = 0
@@ -38,15 +39,8 @@ MOUSEEVENTF_RIGHTUP = 0x0010
 MOUSEEVENTF_MIDDLEDOWN = 0x0020
 MOUSEEVENTF_MIDDLEUP = 0x0040
 MOUSEEVENTF_WHEEL = 0x0800
-MOUSEEVENTF_ABSOLUTE = 0x8000
-MOUSEEVENTF_VIRTUALDESK = 0x4000
 
 KEYEVENTF_KEYUP = 0x0002
-
-SM_XVIRTUALSCREEN = 76
-SM_YVIRTUALSCREEN = 77
-SM_CXVIRTUALSCREEN = 78
-SM_CYVIRTUALSCREEN = 79
 
 _MOUSE_DOWN_FLAG = {
     "left": MOUSEEVENTF_LEFTDOWN,
@@ -90,22 +84,9 @@ class INPUT(ctypes.Structure):
     _fields_ = [("type", wintypes.DWORD), ("u", _INPUT_UNION)]
 
 
-def _normalized(x: int, y: int) -> tuple[int, int]:
-    """Convert screen pixel coords to the 0..65535 range SendInput's
-    MOUSEEVENTF_ABSOLUTE expects, mapped across the full virtual desktop
-    (so multi-monitor setups with a monitor at a negative offset work)."""
-    v_left = _user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
-    v_top = _user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
-    v_width = _user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
-    v_height = _user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
-    nx = round((x - v_left) * 65535 / max(1, v_width - 1))
-    ny = round((y - v_top) * 65535 / max(1, v_height - 1))
-    return nx, ny
-
-
-def _send_mouse_input(dw_flags: int, x: int = 0, y: int = 0, mouse_data: int = 0) -> None:
+def _send_mouse_input(dw_flags: int, dx: int = 0, dy: int = 0, mouse_data: int = 0) -> None:
     inp = INPUT(type=INPUT_MOUSE)
-    inp.mi = MOUSEINPUT(dx=x, dy=y, mouseData=mouse_data & 0xFFFFFFFF,
+    inp.mi = MOUSEINPUT(dx=dx, dy=dy, mouseData=mouse_data & 0xFFFFFFFF,
                          dwFlags=dw_flags, time=0, dwExtraInfo=0)
     sent = _user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
     if sent != 1:
@@ -123,34 +104,35 @@ def _send_key_input(vk_code: int, key_up: bool) -> None:
 
 
 def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) -> None:
-    v_left = _user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
-    v_top = _user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
-    v_width = _user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
-    v_height = _user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
-    nx, ny = _normalized(x, y)
+    """Move the cursor to (x, y) and optionally fire a button/wheel event
+    in the same SendInput call, using a RELATIVE delta from the current
+    cursor position (not MOUSEEVENTF_ABSOLUTE).
+
+    MOUSEEVENTF_ABSOLUTE teleports the OS-tracked cursor position (visible
+    in GetCursorPos) but does not generate the relative-delta events that
+    games reading raw/relative mouse input listen to -- many games hide
+    the system cursor and render their own, driven entirely by relative
+    deltas. Confirmed on this project: GetCursorPos matched the target
+    exactly after an absolute move, but the in-game cursor barely moved
+    and clicks landed on nothing. A relative MOUSEEVENTF_MOVE is what real
+    physical mouse movement generates, so it's what those games see.
+    """
     before = win32api.GetCursorPos()
+    dx, dy = x - before[0], y - before[1]
     _debug_log(
-        f"target=({x},{y}) normalized=({nx},{ny}) "
-        f"virtual_screen=(left={v_left},top={v_top},w={v_width},h={v_height}) "
-        f"button_flag={button_flag} cursor_before={before}"
+        f"target=({x},{y}) cursor_before={before} relative_delta=({dx},{dy}) "
+        f"button_flag={button_flag}"
     )
-    _send_mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK
-                       | button_flag, nx, ny, mouse_data)
+    _send_mouse_input(MOUSEEVENTF_MOVE | button_flag, dx, dy, mouse_data)
     time.sleep(0.05)
     after = win32api.GetCursorPos()
     _debug_log(f"cursor_after={after} (target was ({x},{y}))")
 
 
 class Win32InputController:
-    """Synthesizes mouse/keyboard input via SendInput.
-
-    Earlier used win32api.SetCursorPos + mouse_event/keybd_event (the
-    legacy input APIs). That worked fine against ordinary windows, but a
-    real game window rejected/ignored cursor moves made that way -- Play
-    succeeded when targeting any other window and silently misbehaved
-    (or raised) specifically over the game. SendInput is the modern,
-    unified API real games/DirectInput consumers expect synthetic input
-    through, so every method below goes through it instead.
+    """Synthesizes mouse/keyboard input via SendInput, moving the cursor
+    with RELATIVE deltas rather than absolute positioning (see
+    _move_and_button's docstring for why).
     """
 
     def __init__(self) -> None:
@@ -175,9 +157,7 @@ class Win32InputController:
         for i in range(1, steps + 1):
             x = from_x + (to_x - from_x) * i // steps
             y = from_y + (to_y - from_y) * i // steps
-            nx, ny = _normalized(x, y)
-            _send_mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
-                               nx, ny)
+            _move_and_button(x, y)
             time.sleep(duration_ms / 1000 / steps)
 
         _move_and_button(to_x, to_y, MOUSEEVENTF_LEFTUP)
