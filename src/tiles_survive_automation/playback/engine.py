@@ -1,6 +1,5 @@
 import logging
 import threading
-import time
 from pathlib import Path
 
 import cv2
@@ -31,6 +30,15 @@ class PlaybackEngine:
     def abort(self) -> None:
         self._abort_event.set()
 
+    def reset(self) -> None:
+        """Clear a previously-set abort flag so a fresh run() isn't a one-shot latch.
+
+        Must be called by the caller (PlaybackController.run_async) BEFORE spawning
+        a new run, not from inside run() itself -- run() intentionally honors an
+        abort() that happened before it started (see test_abort_before_run_stops_immediately).
+        """
+        self._abort_event.clear()
+
     def run(self, rule: Rule, hwnd: int) -> PlaybackContext:
         context = PlaybackContext()
         execution_id = self._execution_repository.start_execution("RULE", rule.id or 0)
@@ -51,7 +59,16 @@ class PlaybackEngine:
                 self._execution_repository.finish_execution(execution_id, "STOPPED", None)
                 return context
 
-            outcome = self._execute_step(step, hwnd)
+            try:
+                outcome = self._execute_step(step, hwnd)
+            except Exception as e:
+                message = f"step '{step.name}' raised an exception: {e}"
+                self._input_controller.release_all()
+                self._logger.error(message, extra={"rule_name": rule.name})
+                context.fail(message)
+                self._execution_repository.finish_execution(execution_id, "FAILED", message)
+                return context
+
             if outcome is None:
                 message = f"step '{step.name}' could not be resolved by any strategy"
                 self._logger.error(message, extra={"rule_name": rule.name})
@@ -78,7 +95,10 @@ class PlaybackEngine:
         left, top, width, height = self._window_manager.get_client_rect(hwnd)
 
         if step.step_type == StepType.WAIT:
-            time.sleep(step.params["duration_ms"] / 1000)
+            # Use the abort event as the timeout gate (instead of time.sleep) so a
+            # multi-second Wait is interrupted immediately by F9, not just at the
+            # start of the next loop iteration.
+            self._abort_event.wait(step.params["duration_ms"] / 1000)
             return (None, None, None, None, f"Wait {step.params['duration_ms']}ms")
 
         if step.step_type == StepType.KEY_PRESS:

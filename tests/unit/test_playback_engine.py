@@ -110,6 +110,56 @@ def test_abort_before_run_stops_immediately(tmp_path):
     assert input_controller.calls == []
 
 
+def test_reset_clears_abort_and_next_run_completes(tmp_path):
+    frame = np.full((100, 100, 3), 10, dtype=np.uint8)
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+
+    step = _click_step(template_path=None, strategy=StrategyType.RELATIVE_ONLY)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, input_controller = _engine(frame, templates_dir, tmp_path)
+
+    engine.abort()
+    aborted_context = engine.run(rule, hwnd=1)
+    assert aborted_context.state == PlaybackState.STOPPED
+
+    engine.reset()
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.COMPLETED
+    assert input_controller.calls == [("click", 50, 50, "left")]
+
+
+class _RaisingInputController(FakeInputController):
+    """Fake InputController whose click() raises, to exercise the C3 exception path."""
+
+    def click(self, x: int, y: int, button: str = "left") -> None:
+        raise RuntimeError("simulated failure")
+
+
+def test_exception_during_step_marks_failed_and_releases_input(tmp_path):
+    frame = np.full((100, 100, 3), 10, dtype=np.uint8)
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+
+    step = _click_step(template_path=None, strategy=StrategyType.RELATIVE_ONLY)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, _ = _engine(frame, templates_dir, tmp_path)
+    input_controller = _RaisingInputController()
+    engine._input_controller = input_controller
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.FAILED
+    assert context.error_message is not None
+    assert ("release_all",) in input_controller.calls
+
+    executions = engine._execution_repository._conn.execute(
+        "SELECT status FROM Execution"
+    ).fetchall()
+    assert executions[-1]["status"] == "FAILED"
+
+
 def test_right_click_step_uses_right_button(tmp_path):
     frame = np.full((100, 100, 3), 10, dtype=np.uint8)
     templates_dir = tmp_path / "templates"

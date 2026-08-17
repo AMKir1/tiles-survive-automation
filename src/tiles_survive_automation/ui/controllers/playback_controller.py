@@ -2,6 +2,8 @@ import threading
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from tiles_survive_automation.playback.state import PlaybackContext
+
 
 class PlaybackController(QObject):
     finished = Signal(object)
@@ -15,6 +17,10 @@ class PlaybackController(QObject):
 
     def run_async(self, rule, hwnd: int) -> None:
         self._result_holder.clear()
+        # Clear any abort latched by a previous run (e.g. an F9 press) before
+        # spawning this run's worker thread -- otherwise every run after the
+        # first abort() would immediately see the flag set and return STOPPED.
+        self._engine.reset()
         thread = threading.Thread(target=self._run_in_thread, args=(rule, hwnd),
                                     daemon=True)
         thread.start()
@@ -24,7 +30,16 @@ class PlaybackController(QObject):
         self._engine.abort()
 
     def _run_in_thread(self, rule, hwnd: int) -> None:
-        context = self._engine.run(rule, hwnd)
+        try:
+            context = self._engine.run(rule, hwnd)
+        except Exception as e:
+            # Defense-in-depth backstop: PlaybackEngine.run() already catches
+            # per-step exceptions internally, but if something still escapes
+            # here, make sure _result_holder is populated regardless so the
+            # QTimer poll always completes and `finished` is emitted.
+            context = PlaybackContext()
+            context.start()
+            context.fail(str(e))
         self._result_holder.append(context)
 
     def _poll(self) -> None:
