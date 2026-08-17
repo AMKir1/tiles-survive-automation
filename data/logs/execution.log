@@ -1,0 +1,16 @@
+22:21:31 [Атака мелких] step 'Click' raised an exception: (0, 'SetCursorPos', 'No error message is available')
+22:25:42 [Атака мелких] step 'Click' raised an exception: (0, 'SetCursorPos', 'No error message is available')
+22:26:20 [Атака мелких] step 'Click' raised an exception: (0, 'SetCursorPos', 'No error message is available')
+22:26:44 [атака мелких 2] step 'Click' raised an exception: (0, 'SetCursorPos', 'No error message is available')
+22:33:40 [-] About to ClickImage at (955:int, 218:int)
+22:33:40 [атака мелких 2] step 'Click' raised an exception: (0, 'SetCursorPos', 'No error message is available')
+Traceback (most recent call last):
+  File "C:\Users\amkir\PycharmProjects\tiles-survive-automation\src\tiles_survive_automation\playback\engine.py", line 63, in run
+    outcome = self._execute_step(step, hwnd)
+  File "C:\Users\amkir\PycharmProjects\tiles-survive-automation\src\tiles_survive_automation\playback\engine.py", line 152, in _execute_step
+    self._input_controller.click(abs_x, abs_y)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\amkir\PycharmProjects\tiles-survive-automation\src\tiles_survive_automation\input\win32_input_controller.py", line 28, in click
+    win32api.SetCursorPos((x, y))
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+pywintypes.error: (0, 'SetCursorPos', 'No error message is available')
