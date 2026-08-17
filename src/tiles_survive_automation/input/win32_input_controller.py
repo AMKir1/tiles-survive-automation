@@ -103,7 +103,8 @@ def _send_key_input(vk_code: int, key_up: bool) -> None:
         raise ctypes.WinError(ctypes.get_last_error())
 
 
-_MAX_MOVE_STEP_PX = 15
+_MAX_MOVE_STEP_PX = 10
+_MOVE_STEP_DELAY_S = 0.012
 
 
 def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) -> None:
@@ -125,7 +126,11 @@ def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) 
     clicks landing "somewhere completely unrelated" to the target. A real
     mouse never reports one giant delta; it reports many small ones per
     second. Splitting the move into <= _MAX_MOVE_STEP_PX-sized increments
-    keeps each one inside the acceleration curve's near-linear region.
+    fixed the gross distortion, but the acceleration curve keys off
+    IMPLIED VELOCITY (delta / time-since-last-event), not just delta size
+    -- sending small steps too close together in time still reads as a
+    very fast flick and overshoots. _MOVE_STEP_DELAY_S spaces steps out
+    enough that the implied speed stays in a realistic, near-linear range.
     """
     before = win32api.GetCursorPos()
     total_dx, total_dy = x - before[0], y - before[1]
@@ -145,7 +150,7 @@ def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) 
         _send_mouse_input(MOUSEEVENTF_MOVE | (button_flag if is_last else 0),
                            dx, dy, mouse_data if is_last else 0)
         if not is_last:
-            time.sleep(0.005)
+            time.sleep(_MOVE_STEP_DELAY_S)
 
     time.sleep(0.05)
     after = win32api.GetCursorPos()
