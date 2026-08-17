@@ -1,33 +1,137 @@
+import ctypes
 import sys
 import time
+from ctypes import wintypes
 
 if sys.platform != "win32":
     raise ImportError("Win32InputController can only be used on Windows")
 
 import win32api
-import win32con
 
-_MOUSE_DOWN = {
-    "left": win32con.MOUSEEVENTF_LEFTDOWN,
-    "right": win32con.MOUSEEVENTF_RIGHTDOWN,
-    "middle": win32con.MOUSEEVENTF_MIDDLEDOWN,
+_user32 = ctypes.WinDLL("user32", use_last_error=True)
+
+ULONG_PTR = ctypes.c_size_t
+
+INPUT_MOUSE = 0
+INPUT_KEYBOARD = 1
+
+MOUSEEVENTF_MOVE = 0x0001
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_RIGHTDOWN = 0x0008
+MOUSEEVENTF_RIGHTUP = 0x0010
+MOUSEEVENTF_MIDDLEDOWN = 0x0020
+MOUSEEVENTF_MIDDLEUP = 0x0040
+MOUSEEVENTF_WHEEL = 0x0800
+MOUSEEVENTF_ABSOLUTE = 0x8000
+MOUSEEVENTF_VIRTUALDESK = 0x4000
+
+KEYEVENTF_KEYUP = 0x0002
+
+SM_XVIRTUALSCREEN = 76
+SM_YVIRTUALSCREEN = 77
+SM_CXVIRTUALSCREEN = 78
+SM_CYVIRTUALSCREEN = 79
+
+_MOUSE_DOWN_FLAG = {
+    "left": MOUSEEVENTF_LEFTDOWN,
+    "right": MOUSEEVENTF_RIGHTDOWN,
+    "middle": MOUSEEVENTF_MIDDLEDOWN,
 }
-_MOUSE_UP = {
-    "left": win32con.MOUSEEVENTF_LEFTUP,
-    "right": win32con.MOUSEEVENTF_RIGHTUP,
-    "middle": win32con.MOUSEEVENTF_MIDDLEUP,
+_MOUSE_UP_FLAG = {
+    "left": MOUSEEVENTF_LEFTUP,
+    "right": MOUSEEVENTF_RIGHTUP,
+    "middle": MOUSEEVENTF_MIDDLEUP,
 }
+
+
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.c_long),
+        ("dy", ctypes.c_long),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ULONG_PTR),
+    ]
+
+
+class KEYBDINPUT(ctypes.Structure):
+    _fields_ = [
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ULONG_PTR),
+    ]
+
+
+class _INPUT_UNION(ctypes.Union):
+    _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT)]
+
+
+class INPUT(ctypes.Structure):
+    _anonymous_ = ("u",)
+    _fields_ = [("type", wintypes.DWORD), ("u", _INPUT_UNION)]
+
+
+def _normalized(x: int, y: int) -> tuple[int, int]:
+    """Convert screen pixel coords to the 0..65535 range SendInput's
+    MOUSEEVENTF_ABSOLUTE expects, mapped across the full virtual desktop
+    (so multi-monitor setups with a monitor at a negative offset work)."""
+    v_left = _user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    v_top = _user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+    v_width = _user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    v_height = _user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    nx = round((x - v_left) * 65535 / max(1, v_width - 1))
+    ny = round((y - v_top) * 65535 / max(1, v_height - 1))
+    return nx, ny
+
+
+def _send_mouse_input(dw_flags: int, x: int = 0, y: int = 0, mouse_data: int = 0) -> None:
+    inp = INPUT(type=INPUT_MOUSE)
+    inp.mi = MOUSEINPUT(dx=x, dy=y, mouseData=mouse_data & 0xFFFFFFFF,
+                         dwFlags=dw_flags, time=0, dwExtraInfo=0)
+    sent = _user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+    if sent != 1:
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
+def _send_key_input(vk_code: int, key_up: bool) -> None:
+    inp = INPUT(type=INPUT_KEYBOARD)
+    inp.ki = KEYBDINPUT(wVk=vk_code, wScan=0,
+                         dwFlags=KEYEVENTF_KEYUP if key_up else 0,
+                         time=0, dwExtraInfo=0)
+    sent = _user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+    if sent != 1:
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
+def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) -> None:
+    nx, ny = _normalized(x, y)
+    _send_mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK
+                       | button_flag, nx, ny, mouse_data)
 
 
 class Win32InputController:
+    """Synthesizes mouse/keyboard input via SendInput.
+
+    Earlier used win32api.SetCursorPos + mouse_event/keybd_event (the
+    legacy input APIs). That worked fine against ordinary windows, but a
+    real game window rejected/ignored cursor moves made that way -- Play
+    succeeded when targeting any other window and silently misbehaved
+    (or raised) specifically over the game. SendInput is the modern,
+    unified API real games/DirectInput consumers expect synthetic input
+    through, so every method below goes through it instead.
+    """
+
     def __init__(self) -> None:
         self._held_buttons: set[str] = set()
         self._held_keys: set[str] = set()
 
     def click(self, x: int, y: int, button: str = "left") -> None:
-        win32api.SetCursorPos((x, y))
-        win32api.mouse_event(_MOUSE_DOWN[button], x, y, 0, 0)
-        win32api.mouse_event(_MOUSE_UP[button], x, y, 0, 0)
+        _move_and_button(x, y, _MOUSE_DOWN_FLAG[button])
+        _send_mouse_input(_MOUSE_UP_FLAG[button])
 
     def double_click(self, x: int, y: int) -> None:
         self.click(x, y)
@@ -36,54 +140,52 @@ class Win32InputController:
 
     def drag(self, from_x: int, from_y: int, to_x: int, to_y: int,
               duration_ms: int) -> None:
-        win32api.SetCursorPos((from_x, from_y))
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, from_x, from_y, 0, 0)
+        _move_and_button(from_x, from_y, MOUSEEVENTF_LEFTDOWN)
         self._held_buttons.add("left")
 
         steps = max(1, duration_ms // 15)
         for i in range(1, steps + 1):
             x = from_x + (to_x - from_x) * i // steps
             y = from_y + (to_y - from_y) * i // steps
-            win32api.SetCursorPos((x, y))
+            nx, ny = _normalized(x, y)
+            _send_mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+                               nx, ny)
             time.sleep(duration_ms / 1000 / steps)
 
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, to_x, to_y, 0, 0)
+        _move_and_button(to_x, to_y, MOUSEEVENTF_LEFTUP)
         self._held_buttons.discard("left")
 
     def scroll(self, x: int, y: int, delta: int) -> None:
-        win32api.SetCursorPos((x, y))
-        win32api.mouse_event(win32con.MOUSEEVENTF_WHEEL, x, y, delta, 0)
+        _move_and_button(x, y, MOUSEEVENTF_WHEEL, mouse_data=delta)
 
     def key_press(self, key: str) -> None:
         vk_code = win32api.VkKeyScan(key) & 0xFF
-        win32api.keybd_event(vk_code, 0, 0, 0)
-        win32api.keybd_event(vk_code, 0, win32con.KEYEVENTF_KEYUP, 0)
+        _send_key_input(vk_code, key_up=False)
+        _send_key_input(vk_code, key_up=True)
 
     def hotkey(self, keys: list[str]) -> None:
         vk_codes = [win32api.VkKeyScan(k) & 0xFF for k in keys]
         for code in vk_codes:
-            win32api.keybd_event(code, 0, 0, 0)
+            _send_key_input(code, key_up=False)
             self._held_keys.add(code)
         for code in reversed(vk_codes):
-            win32api.keybd_event(code, 0, win32con.KEYEVENTF_KEYUP, 0)
+            _send_key_input(code, key_up=True)
             self._held_keys.discard(code)
 
     def press_and_hold(self, button: str) -> None:
-        x, y = win32api.GetCursorPos()
-        win32api.mouse_event(_MOUSE_DOWN[button], x, y, 0, 0)
+        _send_mouse_input(_MOUSE_DOWN_FLAG[button])
         self._held_buttons.add(button)
 
     def press_and_hold_key(self, key: str) -> None:
         vk_code = win32api.VkKeyScan(key) & 0xFF
-        win32api.keybd_event(vk_code, 0, 0, 0)
+        _send_key_input(vk_code, key_up=False)
         self._held_keys.add(vk_code)
 
     def release_all(self) -> None:
-        x, y = win32api.GetCursorPos()
         for button in list(self._held_buttons):
-            win32api.mouse_event(_MOUSE_UP[button], x, y, 0, 0)
+            _send_mouse_input(_MOUSE_UP_FLAG[button])
         self._held_buttons.clear()
 
         for vk_code in list(self._held_keys):
-            win32api.keybd_event(vk_code, 0, win32con.KEYEVENTF_KEYUP, 0)
+            _send_key_input(vk_code, key_up=True)
         self._held_keys.clear()
