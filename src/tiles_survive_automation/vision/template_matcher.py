@@ -20,12 +20,17 @@ class MatchResult:
 class TemplateMatcher:
     def find(self, frame: np.ndarray, template: np.ndarray,
              confidence_threshold: float) -> MatchResult | None:
-        result = cv2.matchTemplate(frame, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+        result = cv2.matchTemplate(frame, template, cv2.TM_SQDIFF_NORMED)
+        min_val, _, min_loc, _ = cv2.minMaxLoc(result)
 
-        if max_val < confidence_threshold:
+        # Convert dissimilarity to similarity (1 - dissimilarity)
+        # min_val ranges from 0 (perfect match) to 1 (no match)
+        # confidence ranges from 1 (perfect match) to 0 (no match)
+        confidence = 1.0 - min_val
+
+        if confidence < confidence_threshold:
             return None
 
         height, width = template.shape[:2]
-        return MatchResult(x=max_loc[0], y=max_loc[1], width=width, height=height,
-                            confidence=float(max_val))
+        return MatchResult(x=min_loc[0], y=min_loc[1], width=width, height=height,
+                            confidence=float(confidence))
