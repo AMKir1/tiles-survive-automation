@@ -68,17 +68,20 @@ class RuleBuilder:
         return actions
 
     def _build_click_or_drag(self, down: RecordedStep, up: RecordedStep) -> dict:
-        distance = max(abs(down.relative_x - up.relative_x),
-                        abs(down.relative_y - up.relative_y))
+        # RecordedStep.event.x/y are already real client-pixel coordinates
+        # (converted by RecordingSession), so compare genuine pixel distance
+        # against the pixel threshold instead of scaling relative fractions.
+        distance = max(abs(down.event.x - up.event.x), abs(down.event.y - up.event.y))
         duration_ms = round((up.event.timestamp - down.event.timestamp) * 1000)
 
-        if distance * 1000 > config.DRAG_DISTANCE_THRESHOLD_PX:
+        if distance > config.DRAG_DISTANCE_THRESHOLD_PX:
             return {
                 "type": StepType.DRAG,
                 "timestamp": down.event.timestamp,
                 "end_timestamp": up.event.timestamp,
                 "name": "Drag",
                 "template_path": down.template_path,
+                "screenshot_path": down.screenshot_path,
                 "params": {
                     "from_relative_x": down.relative_x, "from_relative_y": down.relative_y,
                     "to_relative_x": up.relative_x, "to_relative_y": up.relative_y,
@@ -94,7 +97,12 @@ class RuleBuilder:
             "end_timestamp": up.event.timestamp,
             "name": name,
             "template_path": down.template_path,
+            "screenshot_path": down.screenshot_path,
             "params": {"relative_x": down.relative_x, "relative_y": down.relative_y},
+            # Internal-only: real pixel position, used by _merge_double_clicks to
+            # compute a genuine pixel distance between two candidate clicks.
+            "_pixel_x": down.event.x,
+            "_pixel_y": down.event.y,
         }
 
     def _merge_double_clicks(self, actions: list[dict]) -> list[dict]:
@@ -107,12 +115,12 @@ class RuleBuilder:
                 and (action["timestamp"] - merged[-1]["timestamp"]) * 1000
                     <= config.DOUBLE_CLICK_INTERVAL_MS
             ):
-                # Check if clicks are at the same location
+                # Check if clicks are at the same location, using real pixel distance.
                 distance = max(
-                    abs(action["params"]["relative_x"] - merged[-1]["params"]["relative_x"]),
-                    abs(action["params"]["relative_y"] - merged[-1]["params"]["relative_y"])
+                    abs(action["_pixel_x"] - merged[-1]["_pixel_x"]),
+                    abs(action["_pixel_y"] - merged[-1]["_pixel_y"])
                 )
-                if distance * 1000 <= _DOUBLE_CLICK_DISTANCE:
+                if distance <= _DOUBLE_CLICK_DISTANCE:
                     merged[-1] = {**merged[-1], "type": StepType.DOUBLE_CLICK,
                                    "name": "Double Click"}
                     continue
@@ -143,5 +151,6 @@ class RuleBuilder:
             confidence_threshold=config.DEFAULT_CONFIDENCE_THRESHOLD,
             strategy=StrategyType.VISUAL_THEN_RELATIVE if action["template_path"]
                 else StrategyType.RELATIVE_ONLY,
-            verification=None, screenshot_path=None, delay_after_ms=0,
+            verification=None, screenshot_path=action.get("screenshot_path"),
+            delay_after_ms=0,
         )

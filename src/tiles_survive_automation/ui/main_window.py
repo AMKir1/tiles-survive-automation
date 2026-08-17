@@ -116,7 +116,7 @@ class MainWindow(QMainWindow):
         name, ok = QInputDialog.getText(self, "Save Rule", "Rule name:")
         if not ok or not name:
             return
-        rule = RuleBuilder(name, window_title_hint=None).build(steps)
+        rule = RuleBuilder(name, window_title_hint=self.window_combo.currentText()).build(steps)
         self._rule_repository.save(rule)
         self._refresh_rules()
 

@@ -78,6 +78,30 @@ def test_click_outside_client_rect_is_dropped(tmp_path):
     assert steps == []
 
 
+def test_two_recording_sessions_do_not_collide_on_template_paths(tmp_path):
+    events = [
+        RawEvent(timestamp=0.0, kind="mouse_down", x=50, y=40, button="left"),
+        RawEvent(timestamp=0.1, kind="mouse_up", x=50, y=40, button="left"),
+    ]
+
+    session1, recorder1 = _session(events, tmp_path)
+    session1.start(hwnd=1)
+    recorder1.emit_all()
+    steps1 = session1.stop()
+
+    session2, recorder2 = _session(events, tmp_path)
+    session2.start(hwnd=1)
+    recorder2.emit_all()
+    steps2 = session2.stop()
+
+    template_path_1 = steps1[0].template_path
+    template_path_2 = steps2[0].template_path
+
+    assert template_path_1 != template_path_2
+    assert (tmp_path / "templates" / template_path_1).exists()
+    assert (tmp_path / "templates" / template_path_2).exists()
+
+
 def test_pause_drops_events_until_resume(tmp_path):
     events = [RawEvent(timestamp=0.0, kind="mouse_down", x=10, y=10, button="left")]
     session, recorder = _session(events, tmp_path)

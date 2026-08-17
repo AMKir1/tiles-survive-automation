@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,11 +33,16 @@ class RecordingSession:
         self._hwnd: int | None = None
         self._steps: list[RecordedStep] = []
         self._click_index = 0
+        self._session_id: str | None = None
 
     def start(self, hwnd: int) -> None:
         self._hwnd = hwnd
         self._steps = []
         self._click_index = 0
+        # Unique per-session subdirectory so a second recording never overwrites
+        # the first recording's template/screenshot files (they used to collide
+        # on a flat click_N.png namespace shared by every session).
+        self._session_id = uuid.uuid4().hex[:8]
         self._input_recorder.start(on_event=self._on_event)
 
     def pause(self) -> None:
@@ -82,7 +88,7 @@ class RecordingSession:
         self._click_index += 1
         frame = self._screen_capture.grab((left, top, width, height))
 
-        screenshot_dir = self._screenshots_dir
+        screenshot_dir = self._screenshots_dir / self._session_id
         screenshot_dir.mkdir(parents=True, exist_ok=True)
         screenshot_name = f"click_{self._click_index}.png"
         cv2.imwrite(str(screenshot_dir / screenshot_name), frame)
@@ -93,8 +99,11 @@ class RecordingSession:
         y1 = min(height, client_y + TEMPLATE_HALF_SIZE)
         template = frame[y0:y1, x0:x1]
 
-        self._templates_dir.mkdir(parents=True, exist_ok=True)
+        template_dir = self._templates_dir / self._session_id
+        template_dir.mkdir(parents=True, exist_ok=True)
         template_name = f"click_{self._click_index}.png"
-        cv2.imwrite(str(self._templates_dir / template_name), template)
+        cv2.imwrite(str(template_dir / template_name), template)
 
-        return template_name, str(screenshot_dir / screenshot_name)
+        # Relative path INCLUDING the session subdirectory, so it stays a valid
+        # relative path when later joined with templates_dir by PlaybackEngine.
+        return f"{self._session_id}/{template_name}", str(screenshot_dir / screenshot_name)

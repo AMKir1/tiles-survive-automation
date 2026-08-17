@@ -5,11 +5,11 @@ from tiles_survive_automation.rules.rule_builder import RuleBuilder
 
 
 def _step(kind, t, x=None, y=None, rx=None, ry=None, button=None, key=None,
-          template_path=None, dx=0, dy=0):
+          template_path=None, dx=0, dy=0, screenshot_path=None):
     event = RawEvent(timestamp=t, kind=kind, x=x, y=y, button=button, key=key,
                       scroll_dx=dx, scroll_dy=dy)
     return RecordedStep(event=event, relative_x=rx, relative_y=ry,
-                         template_path=template_path, screenshot_path=None)
+                         template_path=template_path, screenshot_path=screenshot_path)
 
 
 def test_click_pair_becomes_click_image_step():
@@ -27,6 +27,18 @@ def test_click_pair_becomes_click_image_step():
     assert step.params == {"relative_x": 0.5, "relative_y": 0.25}
     assert step.template_path == "click_1.png"
     assert step.strategy == StrategyType.VISUAL_THEN_RELATIVE
+
+
+def test_click_pair_threads_screenshot_path_through():
+    steps = [
+        _step("mouse_down", 0.0, x=100, y=50, rx=0.5, ry=0.25, button="left",
+              template_path="click_1.png", screenshot_path="/data/screenshots/s1/click_1.png"),
+        _step("mouse_up", 0.05, x=100, y=50, rx=0.5, ry=0.25, button="left"),
+    ]
+
+    rule = RuleBuilder("Alliance Help", window_title_hint="Tiles Survive").build(steps)
+
+    assert rule.steps[0].screenshot_path == "/data/screenshots/s1/click_1.png"
 
 
 def test_right_button_pair_becomes_right_click_step():
