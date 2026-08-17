@@ -103,10 +103,13 @@ def _send_key_input(vk_code: int, key_up: bool) -> None:
         raise ctypes.WinError(ctypes.get_last_error())
 
 
+_MAX_MOVE_STEP_PX = 15
+
+
 def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) -> None:
     """Move the cursor to (x, y) and optionally fire a button/wheel event
-    in the same SendInput call, using a RELATIVE delta from the current
-    cursor position (not MOUSEEVENTF_ABSOLUTE).
+    on the final step, using RELATIVE deltas from the current cursor
+    position (not MOUSEEVENTF_ABSOLUTE) broken into many small increments.
 
     MOUSEEVENTF_ABSOLUTE teleports the OS-tracked cursor position (visible
     in GetCursorPos) but does not generate the relative-delta events that
@@ -114,19 +117,39 @@ def _move_and_button(x: int, y: int, button_flag: int = 0, mouse_data: int = 0) 
     the system cursor and render their own, driven entirely by relative
     deltas. Confirmed on this project: GetCursorPos matched the target
     exactly after an absolute move, but the in-game cursor barely moved
-    and clicks landed on nothing. A relative MOUSEEVENTF_MOVE is what real
-    physical mouse movement generates, so it's what those games see.
+    and clicks landed on nothing.
+
+    A single huge relative delta isn't enough either: Windows applies
+    pointer-acceleration ("Enhance pointer precision") to MOUSEEVENTF_MOVE
+    deltas, which non-linearly distorts one big jump -- confirmed by
+    clicks landing "somewhere completely unrelated" to the target. A real
+    mouse never reports one giant delta; it reports many small ones per
+    second. Splitting the move into <= _MAX_MOVE_STEP_PX-sized increments
+    keeps each one inside the acceleration curve's near-linear region.
     """
     before = win32api.GetCursorPos()
-    dx, dy = x - before[0], y - before[1]
+    total_dx, total_dy = x - before[0], y - before[1]
     _debug_log(
-        f"target=({x},{y}) cursor_before={before} relative_delta=({dx},{dy}) "
+        f"target=({x},{y}) cursor_before={before} total_delta=({total_dx},{total_dy}) "
         f"button_flag={button_flag}"
     )
-    _send_mouse_input(MOUSEEVENTF_MOVE | button_flag, dx, dy, mouse_data)
+
+    steps = max(1, max(abs(total_dx), abs(total_dy)) // _MAX_MOVE_STEP_PX + 1)
+    sent_dx = sent_dy = 0
+    for i in range(1, steps + 1):
+        step_x = round(total_dx * i / steps)
+        step_y = round(total_dy * i / steps)
+        dx, dy = step_x - sent_dx, step_y - sent_dy
+        sent_dx, sent_dy = step_x, step_y
+        is_last = i == steps
+        _send_mouse_input(MOUSEEVENTF_MOVE | (button_flag if is_last else 0),
+                           dx, dy, mouse_data if is_last else 0)
+        if not is_last:
+            time.sleep(0.005)
+
     time.sleep(0.05)
     after = win32api.GetCursorPos()
-    _debug_log(f"cursor_after={after} (target was ({x},{y}))")
+    _debug_log(f"cursor_after={after} (target was ({x},{y})) steps={steps}")
 
 
 class Win32InputController:
