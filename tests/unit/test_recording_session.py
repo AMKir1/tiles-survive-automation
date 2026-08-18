@@ -1,8 +1,14 @@
+from pathlib import Path
+
 import numpy as np
+import pytest
 
 from tiles_survive_automation.capture.fake_capture import FakeScreenCapture
 from tiles_survive_automation.input.models import RawEvent
-from tiles_survive_automation.recorder.recording_session import RecordingSession
+from tiles_survive_automation.recorder.recording_session import (
+    RecordingSession,
+    _write_image,
+)
 from tiles_survive_automation.window.fake_window_manager import FakeWindowManager
 from tiles_survive_automation.window.ports import WindowInfo
 
@@ -63,6 +69,8 @@ def test_click_inside_window_produces_recorded_step_with_template(tmp_path):
     assert steps[0].relative_y == 0.4   # 40 / 100
     assert steps[0].template_path is not None
     assert (tmp_path / "templates" / steps[0].template_path).exists()
+    assert steps[0].screenshot_path is not None
+    assert Path(steps[0].screenshot_path).exists()
 
 
 def test_click_outside_client_rect_is_dropped(tmp_path):
@@ -100,6 +108,27 @@ def test_two_recording_sessions_do_not_collide_on_template_paths(tmp_path):
     assert template_path_1 != template_path_2
     assert (tmp_path / "templates" / template_path_1).exists()
     assert (tmp_path / "templates" / template_path_2).exists()
+
+
+def test_write_image_handles_non_ascii_directory(tmp_path):
+    frame = np.full((10, 10, 3), 128, dtype=np.uint8)
+    target = tmp_path / "Андрей" / "click_1.png"
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    _write_image(target, frame)
+
+    assert target.exists()
+    assert target.stat().st_size > 0
+
+
+def test_write_image_raises_loudly_when_encoding_fails(tmp_path, monkeypatch):
+    import cv2
+
+    monkeypatch.setattr(cv2, "imencode", lambda ext, img: (False, None))
+    frame = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    with pytest.raises(RuntimeError):
+        _write_image(tmp_path / "click_1.png", frame)
 
 
 def test_pause_drops_events_until_resume(tmp_path):
