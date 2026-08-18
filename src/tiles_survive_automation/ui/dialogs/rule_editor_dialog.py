@@ -71,9 +71,7 @@ class RuleEditorDialog(QDialog):
             lambda value: self._on_field_changed("delay_after_ms", value))
         self.confidence_spin.valueChanged.connect(
             lambda value: self._on_field_changed("confidence_threshold", value))
-        self.strategy_combo.currentIndexChanged.connect(
-            lambda index: self._on_field_changed(
-                "strategy", self.strategy_combo.itemData(index)))
+        self.strategy_combo.currentIndexChanged.connect(self._on_strategy_changed)
 
         form = QFormLayout()
         form.addRow("Name", self.name_edit)
@@ -136,10 +134,17 @@ class RuleEditorDialog(QDialog):
                        self.confidence_spin, self.strategy_combo):
             widget.blockSignals(False)
 
+    def _on_strategy_changed(self, index: int) -> None:
+        if index < 0:
+            return
+        self._on_field_changed("strategy", StrategyType(self.strategy_combo.itemData(index)))
+
     def _on_field_changed(self, field: str, value) -> None:
         if self._current_index is None:
             return
         self.controller.update_step(self._current_index, **{field: value})
+        if field in ("name", "enabled"):
+            self._refresh_list()
 
     def _on_up_clicked(self) -> None:
         if self._current_index is None:

@@ -1,3 +1,5 @@
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from tiles_survive_automation.app_logging.structured_logger import get_execution_logger
@@ -273,3 +275,48 @@ def test_edit_button_cancelled_leaves_rule_unchanged(qtbot, tmp_path, monkeypatc
 
     saved = rule_repository.list_all()[0]
     assert saved.steps[0].name == "Click"
+
+
+def test_changing_strategy_combo_survives_real_save(qtbot, tmp_path):
+    from tiles_survive_automation.ui.dialogs.rule_editor_dialog import RuleEditorDialog
+
+    rule_repository = RuleRepository(connect(":memory:"))
+    saved_rule = rule_repository.save(_make_rule("R"))
+    assert saved_rule.steps[0].strategy == StrategyType.RELATIVE_ONLY
+
+    dialog = RuleEditorDialog(saved_rule, rule_repository)
+    qtbot.addWidget(dialog)
+
+    dialog.step_list.setCurrentRow(0)
+    new_index = dialog.strategy_combo.findText(StrategyType.VISUAL_ONLY.value)
+    assert new_index >= 0
+    dialog.strategy_combo.setCurrentIndex(new_index)
+
+    # Must not raise (pre-fix, this would AttributeError inside step.to_row()
+    # because itemData() round-trips as a bare str, not a StrategyType).
+    dialog._on_save_clicked()
+
+    reloaded = rule_repository.get(saved_rule.id)
+    assert reloaded.steps[0].strategy == StrategyType.VISUAL_ONLY
+    assert isinstance(reloaded.steps[0].strategy, StrategyType)
+
+
+def test_editing_name_refreshes_step_list_row_without_reorder(qtbot, tmp_path):
+    from tiles_survive_automation.ui.dialogs.rule_editor_dialog import RuleEditorDialog
+
+    rule_repository = RuleRepository(connect(":memory:"))
+    saved_rule = rule_repository.save(_make_rule("R"))
+
+    dialog = RuleEditorDialog(saved_rule, rule_repository)
+    qtbot.addWidget(dialog)
+
+    dialog.step_list.setCurrentRow(0)
+    dialog.name_edit.setText("Renamed Step")
+    dialog.name_edit.editingFinished.emit()
+
+    assert "Renamed Step" in dialog.step_list.item(0).text()
+    assert dialog.controller.draft.steps[0].name == "Renamed Step"
+
+    dialog.enabled_check.setChecked(False)
+
+    assert dialog.step_list.item(0).foreground().color() == QColor(Qt.gray)
