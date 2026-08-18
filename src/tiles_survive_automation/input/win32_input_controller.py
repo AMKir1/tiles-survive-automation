@@ -7,6 +7,7 @@ if sys.platform != "win32":
     raise ImportError("Win32InputController can only be used on Windows")
 
 import win32api
+import win32gui
 
 ULONG_PTR = ctypes.c_size_t
 
@@ -50,6 +51,8 @@ _user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT,
                                             ctypes.c_void_p, wintypes.UINT]
 _user32.GetDpiForSystem.restype = wintypes.UINT
 _user32.GetDpiForSystem.argtypes = []
+_user32.GetDpiForWindow.restype = wintypes.UINT
+_user32.GetDpiForWindow.argtypes = [wintypes.HWND]
 
 
 class MOUSEINPUT(ctypes.Structure):
@@ -138,8 +141,19 @@ def _dpi_scale() -> float:
     relative MOUSEEVENTF_MOVE deltas move the cursor in physical pixels.
     At 150% display scaling that's a 1.5x mismatch, so relative deltas
     computed from logical coordinates must be divided by this scale
-    before being sent."""
-    dpi = _user32.GetDpiForSystem()
+    before being sent.
+
+    Uses GetDpiForWindow on the current foreground window rather than
+    GetDpiForSystem: for a PROCESS_PER_MONITOR_DPI_AWARE process (which
+    this app is, see Win32WindowManager), GetDpiForSystem always returns
+    the primary monitor's DPI, not the DPI of the monitor the target
+    window actually sits on -- wrong on any multi-monitor setup where the
+    game isn't on the primary display, even without moving windows
+    between monitors during a run. GetDpiForWindow asks for the DPI of
+    that specific window's monitor, which is what these deltas need.
+    """
+    hwnd = win32gui.GetForegroundWindow()
+    dpi = _user32.GetDpiForWindow(hwnd) if hwnd else _user32.GetDpiForSystem()
     return dpi / 96.0 if dpi else 1.0
 
 
