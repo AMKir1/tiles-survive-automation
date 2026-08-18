@@ -227,3 +227,49 @@ def test_schedule_button_disables_play_and_schedule_until_finished(qtbot, tmp_pa
 
     assert window._play_button.isEnabled()
     assert window._schedule_button.isEnabled()
+
+
+def test_edit_button_saves_changes_made_in_the_dialog(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+
+    from tiles_survive_automation.ui.dialogs.rule_editor_dialog import RuleEditorDialog
+
+    rule_repository = RuleRepository(connect(":memory:"))
+    rule_repository.save(_make_rule("R"))
+    window, rule_repository = _make_window(qtbot, tmp_path, rule_repository=rule_repository)
+    window.rule_list.setCurrentRow(0)
+
+    def fake_exec(self):
+        self.controller.update_step(0, name="Renamed", enabled=False)
+        self.controller.save()
+        return QDialog.Accepted
+
+    monkeypatch.setattr(RuleEditorDialog, "exec", fake_exec)
+
+    window._on_edit_clicked()
+
+    saved = rule_repository.list_all()[0]
+    assert saved.steps[0].name == "Renamed"
+    assert saved.steps[0].enabled is False
+
+
+def test_edit_button_cancelled_leaves_rule_unchanged(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+
+    from tiles_survive_automation.ui.dialogs.rule_editor_dialog import RuleEditorDialog
+
+    rule_repository = RuleRepository(connect(":memory:"))
+    rule_repository.save(_make_rule("R"))
+    window, rule_repository = _make_window(qtbot, tmp_path, rule_repository=rule_repository)
+    window.rule_list.setCurrentRow(0)
+
+    def fake_exec(self):
+        self.controller.update_step(0, name="Should not persist")
+        return QDialog.Rejected
+
+    monkeypatch.setattr(RuleEditorDialog, "exec", fake_exec)
+
+    window._on_edit_clicked()
+
+    saved = rule_repository.list_all()[0]
+    assert saved.steps[0].name == "Click"

@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QInputDialog,
     QListWidget,
@@ -26,6 +27,7 @@ from tiles_survive_automation.ui.controllers.recorder_controller import (
 from tiles_survive_automation.ui.controllers.schedule_controller import (
     ScheduleController,
 )
+from tiles_survive_automation.ui.dialogs.rule_editor_dialog import RuleEditorDialog
 
 
 class MainWindow(QMainWindow):
@@ -96,12 +98,15 @@ class MainWindow(QMainWindow):
 
         rename_button = QPushButton("Rename")
         delete_button = QPushButton("Delete")
+        self._edit_button = QPushButton("Edit")
         rename_button.clicked.connect(self._on_rename_clicked)
         delete_button.clicked.connect(self._on_delete_clicked)
+        self._edit_button.clicked.connect(self._on_edit_clicked)
 
         rule_buttons = QHBoxLayout()
         rule_buttons.addWidget(rename_button)
         rule_buttons.addWidget(delete_button)
+        rule_buttons.addWidget(self._edit_button)
 
         layout = QVBoxLayout()
         layout.addWidget(self.window_combo)
@@ -235,3 +240,11 @@ class MainWindow(QMainWindow):
             return
         self._rule_repository.delete(rule.id)
         self._refresh_rules()
+
+    def _on_edit_clicked(self) -> None:
+        rule = self._selected_rule()
+        if rule is None:
+            return
+        dialog = RuleEditorDialog(rule, self._rule_repository, parent=self)
+        if dialog.exec() == QDialog.Accepted:
+            self._refresh_rules()

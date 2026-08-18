@@ -1,0 +1,168 @@
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QListWidget,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
+from tiles_survive_automation.rules.models import StrategyType
+from tiles_survive_automation.ui.controllers.rule_editor_controller import (
+    RuleEditorController,
+)
+
+
+class RuleEditorDialog(QDialog):
+    def __init__(self, rule, rule_repository, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Edit Rule — {rule.name}")
+        self.controller = RuleEditorController(rule, rule_repository)
+        self._current_index: int | None = None
+        self._build_ui()
+        self._refresh_list()
+
+    def _build_ui(self) -> None:
+        self.step_list = QListWidget()
+        self.step_list.currentRowChanged.connect(self._on_step_selected)
+
+        up_button = QPushButton("Up")
+        down_button = QPushButton("Down")
+        delete_button = QPushButton("Delete")
+        up_button.clicked.connect(self._on_up_clicked)
+        down_button.clicked.connect(self._on_down_clicked)
+        delete_button.clicked.connect(self._on_delete_clicked)
+
+        list_buttons = QHBoxLayout()
+        for button in (up_button, down_button, delete_button):
+            list_buttons.addWidget(button)
+
+        left = QVBoxLayout()
+        left.addWidget(self.step_list)
+        left.addLayout(list_buttons)
+        left_widget = QWidget()
+        left_widget.setLayout(left)
+
+        self.name_edit = QLineEdit()
+        self.enabled_check = QCheckBox()
+        self.delay_spin = QSpinBox()
+        self.delay_spin.setRange(0, 600_000)
+        self.confidence_spin = QDoubleSpinBox()
+        self.confidence_spin.setRange(0.0, 1.0)
+        self.confidence_spin.setSingleStep(0.01)
+        self.strategy_combo = QComboBox()
+        for strategy in StrategyType:
+            self.strategy_combo.addItem(strategy.value, userData=strategy)
+
+        self.name_edit.editingFinished.connect(
+            lambda: self._on_field_changed("name", self.name_edit.text()))
+        self.enabled_check.toggled.connect(
+            lambda value: self._on_field_changed("enabled", value))
+        self.delay_spin.valueChanged.connect(
+            lambda value: self._on_field_changed("delay_after_ms", value))
+        self.confidence_spin.valueChanged.connect(
+            lambda value: self._on_field_changed("confidence_threshold", value))
+        self.strategy_combo.currentIndexChanged.connect(
+            lambda index: self._on_field_changed(
+                "strategy", self.strategy_combo.itemData(index)))
+
+        form = QFormLayout()
+        form.addRow("Name", self.name_edit)
+        form.addRow("Enabled", self.enabled_check)
+        form.addRow("Delay after (ms)", self.delay_spin)
+        form.addRow("Confidence threshold", self.confidence_spin)
+        form.addRow("Strategy", self.strategy_combo)
+
+        self.field_panel = QWidget()
+        self.field_panel.setLayout(form)
+        self.field_panel.setEnabled(False)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_save_clicked)
+        buttons.rejected.connect(self.reject)
+
+        split = QHBoxLayout()
+        split.addWidget(left_widget)
+        split.addWidget(self.field_panel)
+
+        outer = QVBoxLayout()
+        outer.addLayout(split)
+        outer.addWidget(buttons)
+        self.setLayout(outer)
+
+    def _refresh_list(self) -> None:
+        self.step_list.blockSignals(True)
+        previous_row = self.step_list.currentRow()
+        self.step_list.clear()
+        for step in self.controller.draft.steps:
+            self.step_list.addItem(f"{step.order_index}: {step.step_type.value} — {step.name}")
+            if not step.enabled:
+                self.step_list.item(self.step_list.count() - 1).setForeground(QColor(Qt.gray))
+        self.step_list.blockSignals(False)
+
+        row_count = self.step_list.count()
+        if row_count == 0:
+            self._current_index = None
+            self.field_panel.setEnabled(False)
+            return
+        new_row = min(previous_row, row_count - 1) if previous_row >= 0 else 0
+        self.step_list.setCurrentRow(new_row)
+
+    def _on_step_selected(self, row: int) -> None:
+        self._current_index = row if row >= 0 else None
+        if self._current_index is None:
+            self.field_panel.setEnabled(False)
+            return
+        self.field_panel.setEnabled(True)
+        step = self.controller.draft.steps[self._current_index]
+        for widget in (self.name_edit, self.enabled_check, self.delay_spin,
+                       self.confidence_spin, self.strategy_combo):
+            widget.blockSignals(True)
+        self.name_edit.setText(step.name)
+        self.enabled_check.setChecked(step.enabled)
+        self.delay_spin.setValue(step.delay_after_ms)
+        self.confidence_spin.setValue(step.confidence_threshold)
+        self.strategy_combo.setCurrentIndex(self.strategy_combo.findData(step.strategy))
+        for widget in (self.name_edit, self.enabled_check, self.delay_spin,
+                       self.confidence_spin, self.strategy_combo):
+            widget.blockSignals(False)
+
+    def _on_field_changed(self, field: str, value) -> None:
+        if self._current_index is None:
+            return
+        self.controller.update_step(self._current_index, **{field: value})
+
+    def _on_up_clicked(self) -> None:
+        if self._current_index is None:
+            return
+        index = self._current_index
+        self.controller.move_up(index)
+        self._refresh_list()
+        self.step_list.setCurrentRow(max(index - 1, 0))
+
+    def _on_down_clicked(self) -> None:
+        if self._current_index is None:
+            return
+        index = self._current_index
+        self.controller.move_down(index)
+        self._refresh_list()
+        self.step_list.setCurrentRow(min(index + 1, self.step_list.count() - 1))
+
+    def _on_delete_clicked(self) -> None:
+        if self._current_index is None:
+            return
+        self.controller.delete_step(self._current_index)
+        self._refresh_list()
+
+    def _on_save_clicked(self) -> None:
+        self.controller.save()
+        self.accept()
