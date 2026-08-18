@@ -1,7 +1,15 @@
 import sys
 
-from tiles_survive_automation.input.fake_input import FakeInputController, NoOpInputRecorder
-from tiles_survive_automation.input.ports import InputController, InputRecorder
+from tiles_survive_automation.input.fake_input import (
+    FakeInputController,
+    FakeManualClickWatcher,
+    NoOpInputRecorder,
+)
+from tiles_survive_automation.input.ports import (
+    InputController,
+    InputRecorder,
+    ManualClickWatcher,
+)
 
 
 def get_input_recorder() -> InputRecorder:
@@ -20,3 +28,13 @@ def get_input_controller() -> InputController:
 
         return Win32InputController()
     return FakeInputController()
+
+
+def get_manual_click_watcher() -> ManualClickWatcher:
+    if sys.platform == "win32":
+        from tiles_survive_automation.input.win32_manual_click_watcher import (
+            Win32ManualClickWatcher,
+        )
+
+        return Win32ManualClickWatcher()
+    return FakeManualClickWatcher()

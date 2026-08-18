@@ -4,7 +4,10 @@ from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from tiles_survive_automation.app_logging.structured_logger import get_execution_logger
 from tiles_survive_automation.capture.fake_capture import FakeScreenCapture
-from tiles_survive_automation.input.fake_input import FakeInputController
+from tiles_survive_automation.input.fake_input import (
+    FakeInputController,
+    FakeManualClickWatcher,
+)
 from tiles_survive_automation.rules.models import Rule, RuleStep, StepType, StrategyType
 from tiles_survive_automation.storage.database import connect
 from tiles_survive_automation.storage.execution_repository import ExecutionRepository
@@ -17,7 +20,7 @@ import numpy as np
 
 
 def _make_window(qtbot, tmp_path, rule_repository=None, execution_repository=None,
-                  input_controller=None):
+                  input_controller=None, manual_click_watcher=None):
     window_manager = FakeWindowManager(
         [WindowInfo(hwnd=1, title="Tiles Survive", client_rect=(0, 0, 800, 600))]
     )
@@ -30,6 +33,7 @@ def _make_window(qtbot, tmp_path, rule_repository=None, execution_repository=Non
         screen_capture=FakeScreenCapture(np.zeros((600, 800, 3), dtype="uint8")),
         input_recorder=ScriptedRecorder(),
         input_controller=input_controller or FakeInputController(),
+        manual_click_watcher=manual_click_watcher or FakeManualClickWatcher(),
         rule_repository=rule_repository,
         execution_repository=execution_repository,
         logger=logger,
@@ -77,6 +81,7 @@ def test_main_window_lists_windows_and_rules_on_startup(qtbot, tmp_path):
         screen_capture=FakeScreenCapture(np.zeros((600, 800, 3), dtype="uint8")),
         input_recorder=ScriptedRecorder(),
         input_controller=FakeInputController(),
+        manual_click_watcher=FakeManualClickWatcher(),
         rule_repository=rule_repository,
         execution_repository=execution_repository,
         logger=logger,
@@ -105,6 +110,7 @@ def test_emergency_stop_trigger_aborts_playback_and_releases_input(qtbot, tmp_pa
         screen_capture=FakeScreenCapture(np.zeros((600, 800, 3), dtype="uint8")),
         input_recorder=ScriptedRecorder(),
         input_controller=input_controller,
+        manual_click_watcher=FakeManualClickWatcher(),
         rule_repository=rule_repository,
         execution_repository=execution_repository,
         logger=logger,
@@ -140,6 +146,7 @@ def test_play_button_disabled_during_playback_and_reenabled_when_finished(qtbot,
         screen_capture=FakeScreenCapture(np.zeros((600, 800, 3), dtype="uint8")),
         input_recorder=ScriptedRecorder(),
         input_controller=FakeInputController(),
+        manual_click_watcher=FakeManualClickWatcher(),
         rule_repository=rule_repository,
         execution_repository=execution_repository,
         logger=logger,
@@ -157,6 +164,35 @@ def test_play_button_disabled_during_playback_and_reenabled_when_finished(qtbot,
         assert not window._play_button.isEnabled()
 
     assert window._play_button.isEnabled()
+
+
+def test_manual_click_during_playback_aborts_and_logs(qtbot, tmp_path):
+    watcher = FakeManualClickWatcher()
+    rule_repository = RuleRepository(connect(":memory:"))
+    rule_repository.save(_make_rule("R"))
+    window, rule_repository = _make_window(qtbot, tmp_path, rule_repository=rule_repository,
+                                             manual_click_watcher=watcher)
+    window.rule_list.setCurrentRow(0)
+
+    with qtbot.waitSignal(window._playback_controller.finished, timeout=2000):
+        window._on_play_clicked()
+        assert not window._play_button.isEnabled()
+        watcher.simulate_click()
+
+    assert window._play_button.isEnabled()
+    assert "Manual click detected" in window.log_view.toPlainText()
+    assert window._playback_controller._engine._abort_event.is_set()
+
+
+def test_manual_click_without_active_run_is_ignored(qtbot, tmp_path):
+    watcher = FakeManualClickWatcher()
+    window, _ = _make_window(qtbot, tmp_path, manual_click_watcher=watcher)
+
+    assert window._play_button.isEnabled()
+    watcher.simulate_click()
+
+    assert "Manual click detected" not in window.log_view.toPlainText()
+    assert not window._playback_controller._engine._abort_event.is_set()
 
 
 def test_rename_button_updates_rule_name(qtbot, tmp_path, monkeypatch):

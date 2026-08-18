@@ -1,3 +1,27 @@
+from typing import Callable
+
+
+class FakeManualClickWatcher:
+    """Test double for ManualClickWatcher -- never fires on its own; tests
+    call simulate_click() to pretend a real (non-synthetic) click happened.
+    """
+
+    def __init__(self) -> None:
+        self._on_manual_click: Callable[[], None] | None = None
+        self.started = False
+
+    def start(self, on_manual_click: Callable[[], None]) -> None:
+        self._on_manual_click = on_manual_click
+        self.started = True
+
+    def stop(self) -> None:
+        self.started = False
+
+    def simulate_click(self) -> None:
+        if self.started and self._on_manual_click is not None:
+            self._on_manual_click()
+
+
 class NoOpInputRecorder:
     """InputRecorder that does nothing -- used off-Windows where no real
     keyboard/mouse hooking backend is available."""

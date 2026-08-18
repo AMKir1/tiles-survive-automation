@@ -12,6 +12,7 @@ def main() -> None:
     from tiles_survive_automation.input.factory import (
         get_input_controller,
         get_input_recorder,
+        get_manual_click_watcher,
     )
     from tiles_survive_automation.storage.database import connect
     from tiles_survive_automation.storage.execution_repository import (
@@ -32,11 +33,13 @@ def main() -> None:
 
     input_recorder = get_input_recorder()
     input_controller = get_input_controller()
+    manual_click_watcher = get_manual_click_watcher()
 
     app = QApplication(sys.argv)
     window = MainWindow(window_manager, screen_capture, input_recorder,
-                          input_controller, rule_repository, execution_repository,
-                          logger, config.TEMPLATES_DIR, config.SCREENSHOTS_DIR)
+                          input_controller, manual_click_watcher, rule_repository,
+                          execution_repository, logger, config.TEMPLATES_DIR,
+                          config.SCREENSHOTS_DIR)
     window.show()
     app.exec()
 

@@ -39,6 +39,13 @@ _MOUSE_UP_FLAG = {
 _MAX_MOVE_STEP_PX = 10
 _MOVE_STEP_DELAY_S = 0.012
 
+# Tags every SendInput mouse event this process generates, so a low-level
+# mouse hook (Win32ManualClickWatcher) can tell our own synthetic clicks
+# apart from a real human click on dwExtraInfo -- pynput's mouse.Listener
+# doesn't expose that field, so this marker only helps a raw WH_MOUSE_LL
+# hook, not pynput-based code.
+SYNTHETIC_CLICK_MARKER = 0xC0FFEE01
+
 SPI_GETMOUSE = 0x0003
 SPI_SETMOUSE = 0x0004
 SPI_GETMOUSESPEED = 0x0070
@@ -88,7 +95,7 @@ class INPUT(ctypes.Structure):
 def _send_mouse_input(dw_flags: int, dx: int = 0, dy: int = 0, mouse_data: int = 0) -> None:
     inp = INPUT(type=INPUT_MOUSE)
     inp.mi = MOUSEINPUT(dx=dx, dy=dy, mouseData=mouse_data & 0xFFFFFFFF,
-                         dwFlags=dw_flags, time=0, dwExtraInfo=0)
+                         dwFlags=dw_flags, time=0, dwExtraInfo=SYNTHETIC_CLICK_MARKER)
     sent = _user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
     if sent != 1:
         raise ctypes.WinError(ctypes.get_last_error())

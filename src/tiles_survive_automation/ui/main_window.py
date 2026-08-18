@@ -18,6 +18,9 @@ from tiles_survive_automation.playback.engine import PlaybackEngine
 from tiles_survive_automation.playback.state import PlaybackState
 from tiles_survive_automation.recorder.recording_session import RecordingSession
 from tiles_survive_automation.rules.rule_builder import RuleBuilder
+from tiles_survive_automation.ui.controllers.manual_click_bridge import (
+    ManualClickBridge,
+)
 from tiles_survive_automation.ui.controllers.playback_controller import (
     PlaybackController,
 )
@@ -32,8 +35,10 @@ from tiles_survive_automation.ui.dialogs.rule_editor_dialog import RuleEditorDia
 
 class MainWindow(QMainWindow):
     def __init__(self, window_manager, screen_capture, input_recorder,
-                 input_controller, rule_repository, execution_repository, logger,
-                 templates_dir, screenshots_dir, start_emergency_stop: bool = True) -> None:
+                 input_controller, manual_click_watcher, rule_repository,
+                 execution_repository, logger, templates_dir, screenshots_dir,
+                 start_emergency_stop: bool = True,
+                 start_manual_click_watcher: bool = True) -> None:
         super().__init__()
         self.setWindowTitle("Tiles Survive Automation")
 
@@ -67,6 +72,18 @@ class MainWindow(QMainWindow):
                                               hotkey=config.EMERGENCY_STOP_KEY)
         if start_emergency_stop:
             self._emergency_stop.start()
+
+        # Lets the user reclaim control from a running Rule/Schedule by
+        # clicking, not only via F9 -- the watcher ignores our own
+        # synthetic clicks (see win32_manual_click_watcher.py). The watcher
+        # callback may run on a raw background thread, so it's routed
+        # through a Signal (safe from any thread) rather than calling
+        # _on_manual_click_detected directly, which touches log_view.
+        self._manual_click_watcher = manual_click_watcher
+        self._manual_click_bridge = ManualClickBridge()
+        self._manual_click_bridge.detected.connect(self._on_manual_click_detected)
+        if start_manual_click_watcher:
+            self._manual_click_watcher.start(self._manual_click_bridge.detected.emit)
 
         self._pending_recorded_steps = []
         self._build_ui()
@@ -216,6 +233,12 @@ class MainWindow(QMainWindow):
     def _on_emergency_stop_triggered(self) -> None:
         self._playback_controller.abort()
         self._schedule_controller.stop()
+
+    def _on_manual_click_detected(self) -> None:
+        if self._play_button.isEnabled():
+            return  # no Rule/Schedule currently running -- ignore
+        self.log_view.appendPlainText("Manual click detected — run aborted")
+        self._on_emergency_stop_triggered()
 
     def _on_rename_clicked(self) -> None:
         rule = self._selected_rule()
