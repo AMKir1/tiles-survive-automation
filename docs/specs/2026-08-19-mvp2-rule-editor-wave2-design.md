@@ -149,13 +149,39 @@ UI не блокируется заметно): `screen_capture.grab(client_rect
   индекс за пределами (граница), пустой список шагов; проверка, что исходный
   `draft.steps` не мутируется вызовом.
 
-Без автотестов (по прецеденту волны 1 — Qt/Win32-код не выполняется на
-macOS в реальном рантайме): сам `RuleEditorDialog` — превью-виджеты, режим
-ожидания клика при recapture, кнопки Test/Run from here и их
-disable/enable-состояния. Вместо этого — новый ручной чек-лист
-`docs/manual-testing/mvp2-rule-editor-wave2-checklist.md`, создаётся вместе с
-implementation plan, по образцу
-`docs/manual-testing/mvp2-rule-editor-wave1-checklist.md`.
+**Уточнение относительно волны 1:** в проекте уже используется `pytest-qt`
+(`qtbot`) для тестирования `RuleEditorDialog` напрямую, с фейковыми
+`window_manager`/`screen_capture`/`input_recorder`, без реального модального
+`exec()` (см. `tests/unit/test_main_window_smoke.py:270-359` —
+`test_changing_strategy_combo_survives_real_save`,
+`test_editing_name_refreshes_step_list_row_without_reorder` и т.д., уже
+существуют для волны 1). Формулировка "Qt-виджеты не покрыты автотестами" в
+дизайне волны 1 была осторожнее, чем позволяет инфраструктура проекта.
+Поэтому для волны 2 автотестами через `qtbot` + fake-реализации покрывается
+всё, что не требует реального Win32/живой игры:
+
+- Preview: выбор шага с/без `template_path`/`screenshot_path` — виден
+  `QPixmap` либо текст `"No image"`.
+- Recapture: клик по кнопке переводит диалог в режим ожидания; фейковый
+  `input_recorder` эмитит `mouse_down` внутри client rect — `draft` шага
+  получает новые `template_path`/`screenshot_path`, файлы появляются в
+  `tmp_path`; событие вне client rect игнорируется; Esc отменяет ожидание
+  без изменений в `draft`.
+- Test step: `FakeScreenCapture` с известным кадром + синтетический
+  template — статус показывает `"Match found: confidence=... at (...)"`;
+  кадр без совпадения — `"No match found"`; кнопка dimmed для шага без
+  `template_path` или со strategy `RELATIVE_ONLY`.
+- Run-from-step: `playback_controller` (с `FakeInputController`) реально
+  выполняет только `draft.steps[index:]`; кнопки диалога дизейблятся на
+  время выполнения и включаются обратно по `finished`
+  (`qtbot.waitSignal`, тот же паттерн, что уже используется в
+  `test_main_window_smoke.py` для Play/Schedule).
+
+Ручной Windows-чек-лист (`docs/manual-testing/mvp2-rule-editor-wave2-checklist.md`,
+создаётся вместе с implementation plan) сокращается до того, что автотесты
+принципиально не могут проверить: активация окна живой игры перед
+recapture, реальный Win32-клик мышью по игре как источник координаты,
+визуальная адекватность превью на настоящих скриншотах.
 
 ## 5. Вне рамок волны 2
 
