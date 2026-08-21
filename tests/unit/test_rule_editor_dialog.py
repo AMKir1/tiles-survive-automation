@@ -392,3 +392,86 @@ def test_add_step_writes_nothing_to_the_repository_until_save(qtbot, tmp_path,
     assert len(rule_repository.get(saved_rule.id).steps) == 1
     dialog._on_save_clicked()
     assert len(rule_repository.get(saved_rule.id).steps) == 2
+
+
+def _wait_step(step_type=StepType.WAIT_FOR_IMAGE, timeout_ms=5000, name="W"):
+    return RuleStep(
+        id=None, order_index=0, step_type=step_type, name=name, enabled=True,
+        params={"timeout_ms": timeout_ms, "poll_interval_ms": 250},
+        template_path=None, confidence_threshold=0.9,
+        strategy=StrategyType.VISUAL_ONLY, verification=None,
+        screenshot_path=None, delay_after_ms=0,
+    )
+
+
+def _plain_wait_step(duration_ms=800):
+    return RuleStep(
+        id=None, order_index=0, step_type=StepType.WAIT, name="Pause", enabled=True,
+        params={"duration_ms": duration_ms}, template_path=None,
+        confidence_threshold=0.9, strategy=StrategyType.VISUAL_ONLY,
+        verification=None, screenshot_path=None, delay_after_ms=0,
+    )
+
+
+def test_timeout_spin_shows_the_timeout_of_a_wait_step(qtbot, tmp_path):
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(_wait_step(timeout_ms=7000)))
+
+    dialog.step_list.setCurrentRow(0)
+
+    assert dialog.timeout_spin.isEnabled() is True
+    assert dialog.timeout_spin.value() == 7000
+
+
+def test_editing_the_timeout_writes_it_into_the_step_params(qtbot, tmp_path):
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(_wait_step(timeout_ms=7000)))
+    dialog.step_list.setCurrentRow(0)
+
+    dialog.timeout_spin.setValue(2500)
+
+    params = dialog.controller.draft.steps[0].params
+    assert params["timeout_ms"] == 2500
+    assert params["poll_interval_ms"] == 250  # untouched
+
+
+def test_plain_wait_step_edits_its_duration_through_the_same_spin(qtbot, tmp_path):
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(_plain_wait_step(800)))
+    dialog.step_list.setCurrentRow(0)
+    assert dialog.timeout_spin.value() == 800
+
+    dialog.timeout_spin.setValue(1200)
+
+    assert dialog.controller.draft.steps[0].params == {"duration_ms": 1200}
+
+
+def test_switching_between_steps_does_not_leak_a_timeout_into_the_neighbour(qtbot,
+                                                                           tmp_path):
+    """Programmatic setValue must not fire valueChanged: otherwise selecting a
+    step would write the previous step's timeout into this one's params."""
+    dialog, _ = _dialog(qtbot, tmp_path,
+                        rule=_rule(_wait_step(timeout_ms=7000, name="first"),
+                                   _wait_step(timeout_ms=3000, name="second")))
+
+    dialog.step_list.setCurrentRow(0)
+    dialog.step_list.setCurrentRow(1)
+    dialog.step_list.setCurrentRow(0)
+
+    assert dialog.controller.draft.steps[0].params["timeout_ms"] == 7000
+    assert dialog.controller.draft.steps[1].params["timeout_ms"] == 3000
+
+
+def test_widgets_that_do_not_apply_are_disabled_per_step_type(qtbot, tmp_path):
+    dialog, _ = _dialog(qtbot, tmp_path,
+                        rule=_rule(_step(name="Click"), _wait_step(name="WaitImage"),
+                                   _plain_wait_step()))
+
+    dialog.step_list.setCurrentRow(0)
+    assert (dialog.strategy_combo.isEnabled(), dialog.confidence_spin.isEnabled(),
+            dialog.timeout_spin.isEnabled()) == (True, True, False)
+
+    dialog.step_list.setCurrentRow(1)
+    assert (dialog.strategy_combo.isEnabled(), dialog.confidence_spin.isEnabled(),
+            dialog.timeout_spin.isEnabled()) == (False, True, True)
+
+    dialog.step_list.setCurrentRow(2)
+    assert (dialog.strategy_combo.isEnabled(), dialog.confidence_spin.isEnabled(),
+            dialog.timeout_spin.isEnabled()) == (False, False, True)

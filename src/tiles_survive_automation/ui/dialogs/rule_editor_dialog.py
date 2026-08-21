@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from tiles_survive_automation.recorder.image_io import write_image
 from tiles_survive_automation.recorder.template_capture import capture_template
-from tiles_survive_automation.rules.models import StrategyType
+from tiles_survive_automation.rules.models import StepType, StrategyType
 from tiles_survive_automation.ui.controllers.rule_editor_controller import (
     RuleEditorController,
 )
@@ -94,6 +94,9 @@ class RuleEditorDialog(QDialog):
         self.strategy_combo = QComboBox()
         for strategy in StrategyType:
             self.strategy_combo.addItem(strategy.value, userData=strategy)
+        self.timeout_spin = QSpinBox()
+        self.timeout_spin.setRange(0, 600_000)
+        self.timeout_spin.setSingleStep(100)
 
         self.name_edit.editingFinished.connect(
             lambda: self._on_field_changed("name", self.name_edit.text()))
@@ -104,6 +107,7 @@ class RuleEditorDialog(QDialog):
         self.confidence_spin.valueChanged.connect(
             lambda value: self._on_field_changed("confidence_threshold", value))
         self.strategy_combo.currentIndexChanged.connect(self._on_strategy_changed)
+        self.timeout_spin.valueChanged.connect(self._on_timeout_changed)
 
         form = QFormLayout()
         form.addRow("Name", self.name_edit)
@@ -111,6 +115,7 @@ class RuleEditorDialog(QDialog):
         form.addRow("Delay after (ms)", self.delay_spin)
         form.addRow("Confidence threshold", self.confidence_spin)
         form.addRow("Strategy", self.strategy_combo)
+        form.addRow("Timeout / duration (ms)", self.timeout_spin)
 
         self.screenshot_preview = QLabel("No image")
         self.screenshot_preview.setFixedSize(PREVIEW_SIZE, PREVIEW_SIZE)
@@ -188,19 +193,28 @@ class RuleEditorDialog(QDialog):
         self.field_panel.setEnabled(True)
         step = self.controller.draft.steps[self._current_index]
         for widget in (self.name_edit, self.enabled_check, self.delay_spin,
-                       self.confidence_spin, self.strategy_combo):
+                       self.confidence_spin, self.strategy_combo,
+                       self.timeout_spin):
             widget.blockSignals(True)
         self.name_edit.setText(step.name)
         self.enabled_check.setChecked(step.enabled)
         self.delay_spin.setValue(step.delay_after_ms)
         self.confidence_spin.setValue(step.confidence_threshold)
         self.strategy_combo.setCurrentIndex(self.strategy_combo.findData(step.strategy))
+        self.timeout_spin.setValue(self._duration_of(step))
         for widget in (self.name_edit, self.enabled_check, self.delay_spin,
-                       self.confidence_spin, self.strategy_combo):
+                       self.confidence_spin, self.strategy_combo,
+                       self.timeout_spin):
             widget.blockSignals(False)
         self._refresh_previews(step)
         can_test = bool(step.template_path) and step.strategy != StrategyType.RELATIVE_ONLY
         self.test_button.setEnabled(can_test)
+        is_wait_image = step.step_type in (StepType.WAIT_FOR_IMAGE,
+                                           StepType.WAIT_IMAGE_DISAPPEAR)
+        is_plain_wait = step.step_type == StepType.WAIT
+        self.timeout_spin.setEnabled(is_wait_image or is_plain_wait)
+        self.confidence_spin.setEnabled(not is_plain_wait)
+        self.strategy_combo.setEnabled(not (is_wait_image or is_plain_wait))
         self.status_label.setText("")
 
     def _refresh_previews(self, step) -> None:
@@ -228,6 +242,23 @@ class RuleEditorDialog(QDialog):
         self.controller.update_step(self._current_index, **{field: value})
         if field in ("name", "enabled"):
             self._refresh_list()
+
+    @staticmethod
+    def _duration_key(step) -> str:
+        return "duration_ms" if step.step_type == StepType.WAIT else "timeout_ms"
+
+    def _duration_of(self, step) -> int:
+        return int(step.params.get(self._duration_key(step), 0))
+
+    def _on_timeout_changed(self, value: int) -> None:
+        if self._current_index is None:
+            return
+        step = self.controller.draft.steps[self._current_index]
+        # Replace the whole params dict: update_step swaps fields wholesale, so
+        # the other keys (poll_interval_ms) have to be carried over by hand.
+        self.controller.update_step(
+            self._current_index,
+            params={**step.params, self._duration_key(step): value})
 
     def _on_up_clicked(self) -> None:
         if self._current_index is None:
