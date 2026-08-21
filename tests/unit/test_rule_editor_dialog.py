@@ -475,3 +475,25 @@ def test_widgets_that_do_not_apply_are_disabled_per_step_type(qtbot, tmp_path):
     dialog.step_list.setCurrentRow(2)
     assert (dialog.strategy_combo.isEnabled(), dialog.confidence_spin.isEnabled(),
             dialog.timeout_spin.isEnabled()) == (False, False, True)
+
+
+def test_controls_come_back_after_a_successful_recapture(qtbot, tmp_path):
+    """The wait disables the whole dialog. If anything on the completion path
+    throws before _set_controls_enabled(True), the user is left staring at a
+    dead dialog with Save greyed out and no way back except Esc."""
+    import threading
+
+    recorder = ScriptedRecorder()
+    dialog, _ = _dialog(qtbot, tmp_path, recorder=recorder)
+    dialog.step_list.setCurrentRow(0)
+    dialog.recapture_button.click()
+
+    event = RawEvent(timestamp=0.0, kind="mouse_down", x=50, y=40, button="left")
+    thread = threading.Thread(target=lambda: recorder.emit(event))
+    thread.start()
+    thread.join()
+    qtbot.waitUntil(lambda: not dialog._awaiting_recapture, timeout=2000)
+
+    assert dialog.field_panel.isEnabled() is True
+    assert dialog.buttons.isEnabled() is True
+    assert dialog.step_list.isEnabled() is True
