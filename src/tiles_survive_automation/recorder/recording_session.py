@@ -2,28 +2,12 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-import cv2
-
 from tiles_survive_automation.capture.ports import ScreenCapture
 from tiles_survive_automation.input.models import RawEvent
 from tiles_survive_automation.input.ports import InputRecorder
+from tiles_survive_automation.recorder.image_io import write_image
+from tiles_survive_automation.recorder.template_capture import capture_template
 from tiles_survive_automation.window.ports import WindowManager
-
-TEMPLATE_HALF_SIZE = 30
-
-
-def _write_image(path: Path, image) -> None:
-    """cv2.imwrite silently returns False (no exception) on Windows when the
-    path contains non-ASCII characters, instead of raising -- so a Cyrillic
-    username/repo path would drop every template/screenshot with no visible
-    error. imencode + Path.write_bytes goes through Python's own Unicode-safe
-    file APIs instead of OpenCV's platform file I/O, and we check the result
-    explicitly so a real encoding failure raises instead of failing silently.
-    """
-    ok, encoded = cv2.imencode(".png", image)
-    if not ok:
-        raise RuntimeError(f"cv2.imencode failed while writing {path}")
-    path.write_bytes(encoded.tobytes())
 
 
 @dataclass
@@ -105,18 +89,14 @@ class RecordingSession:
         screenshot_dir = self._screenshots_dir / self._session_id
         screenshot_dir.mkdir(parents=True, exist_ok=True)
         screenshot_name = f"click_{self._click_index}.png"
-        _write_image(screenshot_dir / screenshot_name, frame)
+        write_image(screenshot_dir / screenshot_name, frame)
 
-        x0 = max(0, client_x - TEMPLATE_HALF_SIZE)
-        y0 = max(0, client_y - TEMPLATE_HALF_SIZE)
-        x1 = min(width, client_x + TEMPLATE_HALF_SIZE)
-        y1 = min(height, client_y + TEMPLATE_HALF_SIZE)
-        template = frame[y0:y1, x0:x1]
+        template = capture_template(frame, client_x, client_y)
 
         template_dir = self._templates_dir / self._session_id
         template_dir.mkdir(parents=True, exist_ok=True)
         template_name = f"click_{self._click_index}.png"
-        _write_image(template_dir / template_name, template)
+        write_image(template_dir / template_name, template)
 
         # Relative path INCLUDING the session subdirectory, so it stays a valid
         # relative path when later joined with templates_dir by PlaybackEngine.
