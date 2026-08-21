@@ -202,6 +202,16 @@ class MainWindow(QMainWindow):
         if rule is None:
             self._log("No rule selected - click one in the list first.")
             return False
+        if not self._window_manager.accepts_synthetic_input(hwnd):
+            # Windows drops synthesized input aimed at a higher-integrity window
+            # while SendInput still reports success, so the run would log clicks
+            # that never happened and the cursor would never move.
+            self._log(
+                f"WARNING: {self.window_combo.currentText()!r} runs as administrator "
+                f"and this app does not - Windows will silently discard every click "
+                f"we send. Restart this app as administrator (or the game without "
+                f"admin rights)."
+            )
         return True
 
     def _set_running_buttons_enabled(self, enabled: bool) -> None:
