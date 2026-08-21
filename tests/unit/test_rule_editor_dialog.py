@@ -302,3 +302,27 @@ def test_run_from_here_executes_only_steps_from_selected_index(qtbot, tmp_path):
 
     assert dialog.step_list.isEnabled() is True
     assert len(input_controller.calls) == 2  # only steps B and C ran, not A
+
+
+def test_recapture_handles_an_event_delivered_from_a_recorder_thread(qtbot, tmp_path):
+    """The real PynputRecorder calls back from its own listener thread, never
+    from the Qt thread. QTimer.singleShot() started off a thread with no event
+    loop never fires, so the capture silently never happened -- the dialog just
+    kept waiting. Every other recapture test emits from the main thread, which
+    is exactly why they missed this."""
+    import threading
+
+    recorder = ScriptedRecorder()
+    dialog, _ = _dialog(qtbot, tmp_path, recorder=recorder)
+    dialog.step_list.setCurrentRow(0)
+    dialog.recapture_button.click()
+
+    event = RawEvent(timestamp=0.0, kind="mouse_down", x=50, y=40, button="left")
+    thread = threading.Thread(target=lambda: recorder.emit(event))
+    thread.start()
+    thread.join()
+
+    qtbot.waitUntil(lambda: not dialog._awaiting_recapture, timeout=2000)
+    step = dialog.controller.draft.steps[0]
+    assert step.template_path is not None
+    assert (tmp_path / "templates" / step.template_path).exists()

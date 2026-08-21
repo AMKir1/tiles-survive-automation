@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 import cv2
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -33,6 +33,13 @@ PREVIEW_SIZE = 160
 
 
 class RuleEditorDialog(QDialog):
+    # The recorder calls back from its own listener thread. A Signal hops to the
+    # Qt thread through the event loop (queued connection) from any thread;
+    # QTimer.singleShot() cannot -- started off a thread with no event loop it
+    # never fires, so the recapture silently never happened. Same reason
+    # ManualClickBridge exists for the click watcher.
+    _recapture_event = Signal(object)
+
     def __init__(self, rule, rule_repository, window_manager, screen_capture,
                  input_recorder, playback_controller, templates_dir,
                  screenshots_dir, hwnd, parent=None) -> None:
@@ -49,6 +56,7 @@ class RuleEditorDialog(QDialog):
         self._current_index: int | None = None
         self._awaiting_recapture = False
         self._matcher = TemplateMatcher()
+        self._recapture_event.connect(self._handle_recapture_event)
         self._build_ui()
         self._refresh_list()
 
@@ -288,7 +296,7 @@ class RuleEditorDialog(QDialog):
         self.status_label.setText(f"Run from here: {context.state.value}")
 
     def _on_recapture_event(self, event) -> None:
-        QTimer.singleShot(0, lambda: self._handle_recapture_event(event))
+        self._recapture_event.emit(event)
 
     def _handle_recapture_event(self, event) -> None:
         if not self._awaiting_recapture:
@@ -322,12 +330,21 @@ class RuleEditorDialog(QDialog):
         self._on_step_selected(self._current_index)
         self.status_label.setText("Template recaptured.")
         self._set_controls_enabled(True)
+        # activate() put the game in front, so this dialog is now behind it and
+        # the user would never see the new preview or the status line.
+        self._return_to_front()
 
     def _cancel_recapture(self) -> None:
         self._input_recorder.stop()
         self._awaiting_recapture = False
         self.status_label.setText("Recapture cancelled.")
         self._set_controls_enabled(True)
+        self._return_to_front()
+
+    def _return_to_front(self) -> None:
+        window = self.window()
+        window.raise_()
+        window.activateWindow()
 
     def keyPressEvent(self, event) -> None:
         if self._awaiting_recapture and event.key() == Qt.Key_Escape:
