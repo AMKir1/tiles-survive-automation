@@ -46,6 +46,9 @@ class MainWindow(QMainWindow):
         self._rule_repository = rule_repository
         self._templates_dir = templates_dir
         self._logger = logger
+        self._screen_capture = screen_capture
+        self._input_recorder = input_recorder
+        self._screenshots_dir = screenshots_dir
 
         recording_session = RecordingSession(window_manager, screen_capture,
                                               input_recorder, templates_dir,
@@ -268,6 +271,16 @@ class MainWindow(QMainWindow):
         rule = self._selected_rule()
         if rule is None:
             return
-        dialog = RuleEditorDialog(rule, self._rule_repository, parent=self)
+        dialog = RuleEditorDialog(
+            rule, self._rule_repository,
+            window_manager=self._window_manager,
+            screen_capture=self._screen_capture,
+            input_recorder=self._input_recorder,
+            playback_controller=self._playback_controller,
+            templates_dir=self._templates_dir,
+            screenshots_dir=self._screenshots_dir,
+            hwnd=self._current_hwnd(),
+            parent=self,
+        )
         if dialog.exec() == QDialog.Accepted:
             self._refresh_rules()

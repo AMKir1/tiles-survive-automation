@@ -1,5 +1,7 @@
+from pathlib import Path
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -8,6 +10,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QListWidget,
     QPushButton,
@@ -21,12 +24,23 @@ from tiles_survive_automation.ui.controllers.rule_editor_controller import (
     RuleEditorController,
 )
 
+PREVIEW_SIZE = 160
+
 
 class RuleEditorDialog(QDialog):
-    def __init__(self, rule, rule_repository, parent=None) -> None:
+    def __init__(self, rule, rule_repository, window_manager, screen_capture,
+                 input_recorder, playback_controller, templates_dir,
+                 screenshots_dir, hwnd, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Edit Rule — {rule.name}")
         self.controller = RuleEditorController(rule, rule_repository)
+        self._window_manager = window_manager
+        self._screen_capture = screen_capture
+        self._input_recorder = input_recorder
+        self._playback_controller = playback_controller
+        self._templates_dir = Path(templates_dir)
+        self._screenshots_dir = Path(screenshots_dir)
+        self._hwnd = hwnd
         self._current_index: int | None = None
         self._build_ui()
         self._refresh_list()
@@ -80,13 +94,35 @@ class RuleEditorDialog(QDialog):
         form.addRow("Confidence threshold", self.confidence_spin)
         form.addRow("Strategy", self.strategy_combo)
 
+        self.screenshot_preview = QLabel("No image")
+        self.screenshot_preview.setFixedSize(PREVIEW_SIZE, PREVIEW_SIZE)
+        self.screenshot_preview.setAlignment(Qt.AlignCenter)
+        self.template_preview = QLabel("No image")
+        self.template_preview.setFixedSize(PREVIEW_SIZE, PREVIEW_SIZE)
+        self.template_preview.setAlignment(Qt.AlignCenter)
+
+        previews = QHBoxLayout()
+        previews.addWidget(self.screenshot_preview)
+        previews.addWidget(self.template_preview)
+
+        self.status_label = QLabel("")
+
+        # Populated by Recapture/Test/Run-from-here buttons (see rest of wave 2).
+        self.step_actions_layout = QHBoxLayout()
+
+        field_column = QVBoxLayout()
+        field_column.addLayout(form)
+        field_column.addLayout(previews)
+        field_column.addLayout(self.step_actions_layout)
+        field_column.addWidget(self.status_label)
+
         self.field_panel = QWidget()
-        self.field_panel.setLayout(form)
+        self.field_panel.setLayout(field_column)
         self.field_panel.setEnabled(False)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self._on_save_clicked)
-        buttons.rejected.connect(self.reject)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self._on_save_clicked)
+        self.buttons.rejected.connect(self.reject)
 
         split = QHBoxLayout()
         split.addWidget(left_widget)
@@ -94,7 +130,7 @@ class RuleEditorDialog(QDialog):
 
         outer = QVBoxLayout()
         outer.addLayout(split)
-        outer.addWidget(buttons)
+        outer.addWidget(self.buttons)
         self.setLayout(outer)
 
     def _refresh_list(self) -> None:
@@ -133,6 +169,22 @@ class RuleEditorDialog(QDialog):
         for widget in (self.name_edit, self.enabled_check, self.delay_spin,
                        self.confidence_spin, self.strategy_combo):
             widget.blockSignals(False)
+        self._refresh_previews(step)
+        self.status_label.setText("")
+
+    def _refresh_previews(self, step) -> None:
+        self._set_preview(self.screenshot_preview,
+                          Path(step.screenshot_path) if step.screenshot_path else None)
+        self._set_preview(self.template_preview,
+                          self._templates_dir / step.template_path
+                          if step.template_path else None)
+
+    def _set_preview(self, label: QLabel, path: Path | None) -> None:
+        if path is None or not path.exists():
+            label.setText("No image")
+            return
+        pixmap = QPixmap(str(path))
+        label.setPixmap(pixmap.scaled(PREVIEW_SIZE, PREVIEW_SIZE, Qt.KeepAspectRatio))
 
     def _on_strategy_changed(self, index: int) -> None:
         if index < 0:
