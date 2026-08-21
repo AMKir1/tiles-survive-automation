@@ -27,6 +27,7 @@ from tiles_survive_automation.rules.models import StrategyType
 from tiles_survive_automation.ui.controllers.rule_editor_controller import (
     RuleEditorController,
 )
+from tiles_survive_automation.ui.dialogs.add_step_dialog import AddStepDialog
 from tiles_survive_automation.vision.template_matcher import TemplateMatcher
 
 PREVIEW_SIZE = 160
@@ -67,12 +68,14 @@ class RuleEditorDialog(QDialog):
         up_button = QPushButton("Up")
         down_button = QPushButton("Down")
         delete_button = QPushButton("Delete")
+        self.add_step_button = QPushButton("Add step")
         up_button.clicked.connect(self._on_up_clicked)
         down_button.clicked.connect(self._on_down_clicked)
         delete_button.clicked.connect(self._on_delete_clicked)
+        self.add_step_button.clicked.connect(self._on_add_step_clicked)
 
         list_buttons = QHBoxLayout()
-        for button in (up_button, down_button, delete_button):
+        for button in (up_button, down_button, delete_button, self.add_step_button):
             list_buttons.addWidget(button)
 
         left = QVBoxLayout()
@@ -247,6 +250,17 @@ class RuleEditorDialog(QDialog):
             return
         self.controller.delete_step(self._current_index)
         self._refresh_list()
+
+    def _on_add_step_clicked(self) -> None:
+        dialog = AddStepDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        self.controller.add_step(dialog.build_step(), self._current_index)
+        # The new step becomes current so the next thing the user reaches for --
+        # Recapture, to give it a template -- lands on it.
+        new_index = 0 if self._current_index is None else self._current_index + 1
+        self._refresh_list()
+        self.step_list.setCurrentRow(new_index)
 
     def _on_save_clicked(self) -> None:
         self.controller.save()

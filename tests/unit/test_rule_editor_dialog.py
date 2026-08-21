@@ -4,6 +4,7 @@ import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QDialog
 
 from tiles_survive_automation.app_logging.structured_logger import get_execution_logger
 from tiles_survive_automation.capture.fake_capture import FakeScreenCapture
@@ -16,6 +17,7 @@ from tiles_survive_automation.storage.database import connect
 from tiles_survive_automation.storage.execution_repository import ExecutionRepository
 from tiles_survive_automation.storage.rule_repository import RuleRepository
 from tiles_survive_automation.ui.controllers.playback_controller import PlaybackController
+from tiles_survive_automation.ui.dialogs.add_step_dialog import AddStepDialog
 from tiles_survive_automation.ui.dialogs.rule_editor_dialog import RuleEditorDialog
 from tiles_survive_automation.window.fake_window_manager import FakeWindowManager
 from tiles_survive_automation.window.ports import WindowInfo
@@ -326,3 +328,67 @@ def test_recapture_handles_an_event_delivered_from_a_recorder_thread(qtbot, tmp_
     step = dialog.controller.draft.steps[0]
     assert step.template_path is not None
     assert (tmp_path / "templates" / step.template_path).exists()
+
+
+def _accept_add_step_dialog(monkeypatch, step_type, value):
+    """Drives AddStepDialog without a modal loop: fills its widgets and reports
+    Accepted, the same way the existing MainWindow tests drive RuleEditorDialog."""
+    def fake_exec(dialog):
+        dialog.type_combo.setCurrentIndex(dialog.type_combo.findData(step_type))
+        dialog.duration_spin.setValue(value)
+        return QDialog.Accepted
+
+    monkeypatch.setattr(AddStepDialog, "exec", fake_exec)
+
+
+def test_add_step_inserts_the_chosen_step_after_the_selected_one(qtbot, tmp_path,
+                                                                monkeypatch):
+    steps = [_step(name="A", order_index=0), _step(name="B", order_index=1)]
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(*steps))
+    dialog.step_list.setCurrentRow(0)
+    _accept_add_step_dialog(monkeypatch, StepType.WAIT_FOR_IMAGE, 4000)
+
+    dialog.add_step_button.click()
+
+    names = [s.step_type.value for s in dialog.controller.draft.steps]
+    assert names == ["ClickImage", "WaitForImage", "ClickImage"]
+    assert dialog.controller.draft.steps[1].params["timeout_ms"] == 4000
+
+
+def test_add_step_selects_the_new_step_so_recapture_targets_it(qtbot, tmp_path,
+                                                              monkeypatch):
+    steps = [_step(name="A", order_index=0), _step(name="B", order_index=1)]
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(*steps))
+    dialog.step_list.setCurrentRow(0)
+    _accept_add_step_dialog(monkeypatch, StepType.WAIT_FOR_IMAGE, 4000)
+
+    dialog.add_step_button.click()
+
+    assert dialog.step_list.currentRow() == 1
+    assert dialog._current_index == 1
+
+
+def test_add_step_cancelled_changes_nothing(qtbot, tmp_path, monkeypatch):
+    dialog, _ = _dialog(qtbot, tmp_path)
+    dialog.step_list.setCurrentRow(0)
+    monkeypatch.setattr(AddStepDialog, "exec", lambda dialog: QDialog.Rejected)
+
+    dialog.add_step_button.click()
+
+    assert len(dialog.controller.draft.steps) == 1
+
+
+def test_add_step_writes_nothing_to_the_repository_until_save(qtbot, tmp_path,
+                                                             monkeypatch):
+    rule_repository = RuleRepository(connect(":memory:"))
+    saved_rule = rule_repository.save(_rule())
+    dialog, _ = _dialog(qtbot, tmp_path, rule=saved_rule,
+                        rule_repository=rule_repository)
+    dialog.step_list.setCurrentRow(0)
+    _accept_add_step_dialog(monkeypatch, StepType.WAIT, 1500)
+
+    dialog.add_step_button.click()
+
+    assert len(rule_repository.get(saved_rule.id).steps) == 1
+    dialog._on_save_clicked()
+    assert len(rule_repository.get(saved_rule.id).steps) == 2
