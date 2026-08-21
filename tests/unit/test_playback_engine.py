@@ -437,3 +437,41 @@ def test_abort_during_a_wait_stops_the_run_instead_of_waiting_out_the_timeout(tm
     assert context.state == PlaybackState.STOPPED
     assert context.error_message is None  # aborted, not failed
     assert capture.grabs == 2
+
+
+def test_wait_image_disappear_succeeds_when_the_template_is_already_gone(tmp_path):
+    templates_dir, _, blank, _ = _templates_with_marker(tmp_path)
+    step = _wait_image_step(StepType.WAIT_IMAGE_DISAPPEAR)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, input_controller = _engine(blank, templates_dir, tmp_path)
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.COMPLETED
+    assert input_controller.calls == []
+
+
+def test_wait_image_disappear_polls_until_the_template_goes_away(tmp_path):
+    templates_dir, _, blank, visible = _templates_with_marker(tmp_path)
+    capture = SequenceCapture([visible, visible, blank])
+    step = _wait_image_step(StepType.WAIT_IMAGE_DISAPPEAR)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, _ = _engine(blank, templates_dir, tmp_path, capture=capture)
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.COMPLETED
+    assert capture.grabs == 3
+
+
+def test_wait_image_disappear_fails_when_the_template_stays_on_screen(tmp_path):
+    templates_dir, _, _, visible = _templates_with_marker(tmp_path)
+    step = _wait_image_step(StepType.WAIT_IMAGE_DISAPPEAR, timeout_ms=100,
+                            poll_interval_ms=10)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, _ = _engine(visible, templates_dir, tmp_path)
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.FAILED
+    assert "waiting for the image to disappear" in context.error_message
