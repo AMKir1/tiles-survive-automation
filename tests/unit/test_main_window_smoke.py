@@ -310,3 +310,80 @@ def test_edit_button_cancelled_leaves_rule_unchanged(qtbot, tmp_path, monkeypatc
     saved = rule_repository.list_all()[0]
     assert saved.steps[0].name == "Click"
 
+
+
+def test_play_without_selected_rule_says_why_instead_of_doing_nothing(qtbot, tmp_path):
+    window, _ = _make_window(qtbot, tmp_path)
+    window.rule_list.setCurrentRow(-1)
+
+    window._on_play_clicked()
+
+    assert "No rule selected" in window.log_view.toPlainText()
+
+
+def test_play_without_selected_window_says_why_instead_of_doing_nothing(qtbot, tmp_path):
+    window, rule_repository = _make_window(qtbot, tmp_path)
+    rule_repository.save(_make_rule("R"))
+    window._refresh_rules()
+    window.rule_list.setCurrentRow(0)
+    window.window_combo.clear()  # no game window available
+
+    window._on_play_clicked()
+
+    assert "No game window selected" in window.log_view.toPlainText()
+
+
+def test_record_without_selected_window_says_why(qtbot, tmp_path):
+    window, _ = _make_window(qtbot, tmp_path)
+    window.window_combo.clear()
+
+    window._on_record_clicked()
+
+    assert "No game window selected" in window.log_view.toPlainText()
+
+
+def test_recording_that_captured_nothing_says_why(qtbot, tmp_path):
+    window, _ = _make_window(qtbot, tmp_path)
+
+    window._on_recording_stopped([])
+
+    text = window.log_view.toPlainText()
+    assert "0 steps" in text
+    assert "Tiles Survive" in text  # names the window the events were filtered against
+
+
+def test_refresh_windows_button_picks_up_a_window_opened_after_startup(qtbot, tmp_path):
+    window, _ = _make_window(qtbot, tmp_path)
+    assert window.window_combo.count() == 1
+
+    window._window_manager._windows[2] = WindowInfo(
+        hwnd=2, title="Notepad", client_rect=(0, 0, 100, 100))
+    window._refresh_windows_button.click()
+
+    assert window.window_combo.count() == 2
+
+
+def test_refresh_windows_keeps_the_window_the_user_picked(qtbot, tmp_path):
+    window, _ = _make_window(qtbot, tmp_path)
+    window._window_manager._windows[2] = WindowInfo(
+        hwnd=2, title="Notepad", client_rect=(0, 0, 100, 100))
+    window._refresh_windows_button.click()
+    window.window_combo.setCurrentIndex(window.window_combo.findData(2))
+
+    window._refresh_windows_button.click()
+
+    assert window._current_hwnd() == 2
+
+
+def test_refresh_rules_keeps_the_rule_the_user_picked(qtbot, tmp_path):
+    window, rule_repository = _make_window(qtbot, tmp_path)
+    rule_repository.save(_make_rule("first"))
+    rule_repository.save(_make_rule("second"))
+    window._refresh_rules()
+    window.rule_list.setCurrentRow(1)
+    assert window._selected_rule().name == "second"
+
+    window._refresh_rules()
+
+    assert window._selected_rule() is not None
+    assert window._selected_rule().name == "second"

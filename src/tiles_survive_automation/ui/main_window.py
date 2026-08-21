@@ -1,3 +1,4 @@
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -128,8 +129,19 @@ class MainWindow(QMainWindow):
         rule_buttons.addWidget(delete_button)
         rule_buttons.addWidget(self._edit_button)
 
+        # The window list is a snapshot taken at startup; with no way to
+        # re-enumerate, restarting the game (or launching this app first) left
+        # the combo pointing at a window that never was the game -- which
+        # silently broke both Record and Play, with no visible reason.
+        self._refresh_windows_button = QPushButton("Refresh windows")
+        self._refresh_windows_button.clicked.connect(self._refresh_windows)
+
+        window_row = QHBoxLayout()
+        window_row.addWidget(self.window_combo, stretch=1)
+        window_row.addWidget(self._refresh_windows_button)
+
         layout = QVBoxLayout()
-        layout.addWidget(self.window_combo)
+        layout.addLayout(window_row)
         layout.addLayout(buttons)
         layout.addWidget(self.rule_list)
         layout.addLayout(rule_buttons)
@@ -139,15 +151,37 @@ class MainWindow(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
+    def _log(self, message: str) -> None:
+        self.log_view.appendPlainText(message)
+
     def _refresh_windows(self) -> None:
+        # Keep whatever the user picked: re-enumerating must not silently move
+        # the selection to an unrelated window.
+        previous_hwnd = self.window_combo.currentData()
         self.window_combo.clear()
         for info in self._window_manager.list_windows():
             self.window_combo.addItem(info.title, userData=info.hwnd)
 
+        if previous_hwnd is not None:
+            index = self.window_combo.findData(previous_hwnd)
+            if index >= 0:
+                self.window_combo.setCurrentIndex(index)
+
     def _refresh_rules(self) -> None:
+        # Rebuilding the list resets currentRow to -1, which made _selected_rule()
+        # return None and every subsequent Play/Schedule silently do nothing.
+        previous_name = None
+        if self.rule_list.currentRow() >= 0:
+            previous_name = self.rule_list.currentItem().text()
+
         self.rule_list.clear()
         for rule in self._rule_repository.list_all():
             self.rule_list.addItem(rule.name)
+
+        if previous_name is not None:
+            matches = self.rule_list.findItems(previous_name, Qt.MatchExactly)
+            if matches:
+                self.rule_list.setCurrentRow(self.rule_list.row(matches[0]))
 
     def _current_hwnd(self) -> int | None:
         return self.window_combo.currentData()
@@ -158,18 +192,39 @@ class MainWindow(QMainWindow):
             return None
         return self._rule_repository.list_all()[selected]
 
+    def _require_target(self, hwnd, rule) -> bool:
+        """Both Play and Schedule used to return silently when either half of
+        the target was missing, which is indistinguishable from a dead button."""
+        if hwnd is None:
+            self._log("No game window selected - pick the game in the list above "
+                      "(Refresh windows if it is not there).")
+            return False
+        if rule is None:
+            self._log("No rule selected - click one in the list first.")
+            return False
+        return True
+
     def _set_running_buttons_enabled(self, enabled: bool) -> None:
         self._play_button.setEnabled(enabled)
         self._schedule_button.setEnabled(enabled)
 
     def _on_record_clicked(self) -> None:
         hwnd = self._current_hwnd()
-        if hwnd is not None:
-            self._recorder_controller.start(hwnd)
+        if hwnd is None:
+            self._log("No game window selected - pick the game in the list above "
+                      "(Refresh windows if it is not there).")
+            return
+        self._log(f"Recording into window: {self.window_combo.currentText()}")
+        self._recorder_controller.start(hwnd)
 
     def _on_recording_stopped(self, steps) -> None:
         self._pending_recorded_steps = steps
         if not steps:
+            # Every event outside the selected window's client rect is dropped,
+            # so picking the wrong window yields zero steps and nothing to save.
+            self._log(f"Recording stopped: 0 steps captured. Events are only kept "
+                      f"inside the selected window "
+                      f"({self.window_combo.currentText()!r}) - is that the game?")
             return
         name, ok = QInputDialog.getText(self, "Save Rule", "Rule name:")
         if not ok or not name:
@@ -181,7 +236,7 @@ class MainWindow(QMainWindow):
     def _on_play_clicked(self) -> None:
         hwnd = self._current_hwnd()
         rule = self._selected_rule()
-        if hwnd is None or rule is None:
+        if not self._require_target(hwnd, rule):
             return
         # Guard against re-entrancy: two overlapping Play/Schedule runs would
         # spawn two threads sharing one PlaybackEngine/_result_holder, and the
@@ -206,7 +261,7 @@ class MainWindow(QMainWindow):
     def _on_schedule_clicked(self) -> None:
         hwnd = self._current_hwnd()
         rule = self._selected_rule()
-        if hwnd is None or rule is None:
+        if not self._require_target(hwnd, rule):
             return
 
         total_runs, ok = QInputDialog.getInt(self, "Schedule", "Total runs:", 100, 1, 100000)
