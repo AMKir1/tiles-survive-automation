@@ -1,6 +1,7 @@
 import uuid
 from pathlib import Path
 
+import cv2
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
@@ -26,6 +27,7 @@ from tiles_survive_automation.rules.models import StrategyType
 from tiles_survive_automation.ui.controllers.rule_editor_controller import (
     RuleEditorController,
 )
+from tiles_survive_automation.vision.template_matcher import TemplateMatcher
 
 PREVIEW_SIZE = 160
 
@@ -46,6 +48,7 @@ class RuleEditorDialog(QDialog):
         self._hwnd = hwnd
         self._current_index: int | None = None
         self._awaiting_recapture = False
+        self._matcher = TemplateMatcher()
         self._build_ui()
         self._refresh_list()
 
@@ -117,6 +120,10 @@ class RuleEditorDialog(QDialog):
         self.recapture_button.clicked.connect(self._on_recapture_clicked)
         self.step_actions_layout.addWidget(self.recapture_button)
 
+        self.test_button = QPushButton("Test")
+        self.test_button.clicked.connect(self._on_test_clicked)
+        self.step_actions_layout.addWidget(self.test_button)
+
         field_column = QVBoxLayout()
         field_column.addLayout(form)
         field_column.addLayout(previews)
@@ -177,6 +184,8 @@ class RuleEditorDialog(QDialog):
                        self.confidence_spin, self.strategy_combo):
             widget.blockSignals(False)
         self._refresh_previews(step)
+        can_test = bool(step.template_path) and step.strategy != StrategyType.RELATIVE_ONLY
+        self.test_button.setEnabled(can_test)
         self.status_label.setText("")
 
     def _refresh_previews(self, step) -> None:
@@ -240,6 +249,26 @@ class RuleEditorDialog(QDialog):
         self._window_manager.activate(self._hwnd)
         self._recapture_session_id = uuid.uuid4().hex[:8]
         self._input_recorder.start(on_event=self._on_recapture_event)
+
+    def _on_test_clicked(self) -> None:
+        if self._current_index is None or self._hwnd is None:
+            return
+        step = self.controller.draft.steps[self._current_index]
+        if not step.template_path:
+            return
+        left, top, width, height = self._window_manager.get_client_rect(self._hwnd)
+        frame = self._screen_capture.grab((left, top, width, height))
+        template = cv2.imread(str(self._templates_dir / step.template_path))
+        if template is None:
+            self.status_label.setText("Template file not found.")
+            return
+        match = self._matcher.find(frame, template, step.confidence_threshold)
+        if match is None:
+            self.status_label.setText("No match found")
+            return
+        x, y = match.center
+        self.status_label.setText(
+            f"Match found: confidence={match.confidence:.2f} at ({x}, {y})")
 
     def _on_recapture_event(self, event) -> None:
         QTimer.singleShot(0, lambda: self._handle_recapture_event(event))

@@ -201,3 +201,60 @@ def test_escape_cancels_recapture_without_changing_draft(qtbot, tmp_path):
     assert dialog._awaiting_recapture is False
     assert dialog.controller.draft.steps[0].template_path == original_template_path
     assert dialog.status_label.text() == "Recapture cancelled."
+
+
+def test_test_button_disabled_when_step_has_no_template(qtbot, tmp_path):
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(_step(template_path=None)))
+
+    dialog.step_list.setCurrentRow(0)
+
+    assert dialog.test_button.isEnabled() is False
+
+
+def test_test_button_disabled_when_strategy_is_relative_only(qtbot, tmp_path):
+    step = _step(template_path="session/click_1.png", strategy=StrategyType.RELATIVE_ONLY)
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(step))
+
+    dialog.step_list.setCurrentRow(0)
+
+    assert dialog.test_button.isEnabled() is False
+
+
+def test_test_button_reports_match_found(qtbot, tmp_path):
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    frame[40:60, 80:100] = 255
+    template = frame[40:60, 80:100].copy()
+
+    template_rel = "session/click_1.png"
+    template_full = tmp_path / "templates" / template_rel
+    template_full.parent.mkdir(parents=True, exist_ok=True)
+    write_image(template_full, template)
+
+    step = _step(template_path=template_rel, strategy=StrategyType.VISUAL_ONLY)
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(step))
+    dialog._screen_capture = FakeScreenCapture(frame)
+    dialog.step_list.setCurrentRow(0)
+
+    dialog.test_button.click()
+
+    assert dialog.status_label.text().startswith("Match found: confidence=1.00")
+
+
+def test_test_button_reports_no_match(qtbot, tmp_path):
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    template = np.full((20, 20, 3), 255, dtype=np.uint8)
+
+    template_rel = "session/click_1.png"
+    template_full = tmp_path / "templates" / template_rel
+    template_full.parent.mkdir(parents=True, exist_ok=True)
+    write_image(template_full, template)
+
+    step = _step(template_path=template_rel, strategy=StrategyType.VISUAL_ONLY,
+                 confidence_threshold=0.99)
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(step))
+    dialog._screen_capture = FakeScreenCapture(frame)
+    dialog.step_list.setCurrentRow(0)
+
+    dialog.test_button.click()
+
+    assert dialog.status_label.text() == "No match found"
