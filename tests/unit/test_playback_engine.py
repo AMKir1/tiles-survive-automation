@@ -475,3 +475,37 @@ def test_wait_image_disappear_fails_when_the_template_stays_on_screen(tmp_path):
 
     assert context.state == PlaybackState.FAILED
     assert "waiting for the image to disappear" in context.error_message
+
+
+def test_wait_step_without_a_template_says_to_use_recapture(tmp_path):
+    """Add step creates the step without a picture on purpose -- the user
+    attaches it with Recapture afterwards. Forgetting that must produce advice,
+    not a cv2 crash or a pointless full-length timeout."""
+    templates_dir, _, blank, _ = _templates_with_marker(tmp_path)
+    step = _wait_image_step(StepType.WAIT_FOR_IMAGE, template_path=None,
+                            timeout_ms=60000)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, _ = _engine(blank, templates_dir, tmp_path)
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.FAILED
+    assert "has no template" in context.error_message
+    assert "Recapture" in context.error_message
+
+
+def test_wait_step_with_an_unreadable_template_file_says_so(tmp_path):
+    """cv2.imread returns None for a missing or non-ASCII path instead of
+    raising, so an unreadable template must be reported, not treated as
+    'image not on screen yet'."""
+    templates_dir, _, blank, _ = _templates_with_marker(tmp_path)
+    (templates_dir / "broken.png").write_bytes(b"not a png")
+    step = _wait_image_step(StepType.WAIT_FOR_IMAGE, template_path="broken.png",
+                            timeout_ms=60000)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, _ = _engine(blank, templates_dir, tmp_path)
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.FAILED
+    assert "unreadable" in context.error_message

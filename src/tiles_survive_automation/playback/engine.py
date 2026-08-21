@@ -192,7 +192,14 @@ class PlaybackEngine:
         time.sleep so F9 cuts a 10-second wait short instead of being noticed
         only once the wait expires.
         """
-        template = cv2.imread(str(self._templates_dir / step.template_path))
+        if not step.template_path:
+            return StepFailure(f"step '{step.name}' has no template - use "
+                               f"Recapture in the Rule Editor first")
+        template_path = self._templates_dir / step.template_path
+        template = cv2.imread(str(template_path))
+        if template is None:
+            return StepFailure(f"step '{step.name}' template file is missing or "
+                               f"unreadable: {template_path}")
         want_visible = step.step_type == StepType.WAIT_FOR_IMAGE
         timeout_ms = step.params.get("timeout_ms", config.WAIT_FOR_IMAGE_TIMEOUT_MS)
         poll_s = step.params.get("poll_interval_ms",
