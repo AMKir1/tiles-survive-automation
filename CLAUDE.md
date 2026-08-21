@@ -99,11 +99,13 @@ fake-реализациями. Не считать фичу готовой, по
 плюс сверх спеки — Schedule (повтор батчами), Rename/Delete. MVP2 Rule Editor:
 волна 1 (reorder/delete/rename/enabled/delay/confidence/strategy) и волна 2
 (preview, recapture, test step, run-from-step) — обе провалидированы на живой
-игре, чек-листы в `docs/manual-testing/` отмечены пройденными.
+игре, чек-листы в `docs/manual-testing/` отмечены пройденными. Шаги
+`WaitForImage`/`WaitImageDisappear` исполняются движком и создаются кнопкой
+Add step в Rule Editor; шаблон к ним привязывается Recapture.
 
-Не сделано: `WaitForImage`/`WaitImageDisappear` (типы объявлены в `StepType` и
-колонка `verification_json` есть в схеме, но `PlaybackEngine` их не исполняет,
-а `RuleBuilder` не создаёт), Debug Mode, весь MVP3 — модуль `scenarios/`
+Не сделано: verification (ожидание, прикреплённое к другому шагу) — колонка
+`verification_json` в схеме есть, но не используется; Debug Mode,
+весь MVP3 — модуль `scenarios/`
 отсутствует, хотя таблицы `Scenario`/`ScenarioRule` в схеме уже описаны;
 истории `Execution` нет в UI, хотя `ExecutionRepository` её пишет.
 `StepType.HOTKEY` объявлен, но не создаётся билдером и не исполняется движком.
