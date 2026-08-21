@@ -1,6 +1,7 @@
+import uuid
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -19,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tiles_survive_automation.recorder.image_io import write_image
+from tiles_survive_automation.recorder.template_capture import capture_template
 from tiles_survive_automation.rules.models import StrategyType
 from tiles_survive_automation.ui.controllers.rule_editor_controller import (
     RuleEditorController,
@@ -42,6 +45,7 @@ class RuleEditorDialog(QDialog):
         self._screenshots_dir = Path(screenshots_dir)
         self._hwnd = hwnd
         self._current_index: int | None = None
+        self._awaiting_recapture = False
         self._build_ui()
         self._refresh_list()
 
@@ -107,8 +111,11 @@ class RuleEditorDialog(QDialog):
 
         self.status_label = QLabel("")
 
-        # Populated by Recapture/Test/Run-from-here buttons (see rest of wave 2).
         self.step_actions_layout = QHBoxLayout()
+
+        self.recapture_button = QPushButton("Recapture")
+        self.recapture_button.clicked.connect(self._on_recapture_clicked)
+        self.step_actions_layout.addWidget(self.recapture_button)
 
         field_column = QVBoxLayout()
         field_column.addLayout(form)
@@ -223,3 +230,71 @@ class RuleEditorDialog(QDialog):
     def _on_save_clicked(self) -> None:
         self.controller.save()
         self.accept()
+
+    def _on_recapture_clicked(self) -> None:
+        if self._current_index is None or self._hwnd is None:
+            return
+        self._awaiting_recapture = True
+        self._set_controls_enabled(False)
+        self.status_label.setText("Click on the game window now… (Esc to cancel)")
+        self._window_manager.activate(self._hwnd)
+        self._recapture_session_id = uuid.uuid4().hex[:8]
+        self._input_recorder.start(on_event=self._on_recapture_event)
+
+    def _on_recapture_event(self, event) -> None:
+        QTimer.singleShot(0, lambda: self._handle_recapture_event(event))
+
+    def _handle_recapture_event(self, event) -> None:
+        if not self._awaiting_recapture:
+            return
+        if event.kind != "mouse_down" or event.x is None or event.y is None:
+            return
+        left, top, width, height = self._window_manager.get_client_rect(self._hwnd)
+        client_x, client_y = event.x - left, event.y - top
+        if not (0 <= client_x < width and 0 <= client_y < height):
+            return
+
+        self._input_recorder.stop()
+        frame = self._screen_capture.grab((left, top, width, height))
+
+        screenshot_dir = self._screenshots_dir / self._recapture_session_id
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        screenshot_path = screenshot_dir / "recapture.png"
+        write_image(screenshot_path, frame)
+
+        template = capture_template(frame, client_x, client_y)
+        template_dir = self._templates_dir / self._recapture_session_id
+        template_dir.mkdir(parents=True, exist_ok=True)
+        write_image(template_dir / "recapture.png", template)
+
+        self.controller.update_step(
+            self._current_index,
+            template_path=f"{self._recapture_session_id}/recapture.png",
+            screenshot_path=str(screenshot_path),
+        )
+        self._awaiting_recapture = False
+        self._on_step_selected(self._current_index)
+        self.status_label.setText("Template recaptured.")
+        self._set_controls_enabled(True)
+
+    def _cancel_recapture(self) -> None:
+        self._input_recorder.stop()
+        self._awaiting_recapture = False
+        self.status_label.setText("Recapture cancelled.")
+        self._set_controls_enabled(True)
+
+    def keyPressEvent(self, event) -> None:
+        if self._awaiting_recapture and event.key() == Qt.Key_Escape:
+            self._cancel_recapture()
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event) -> None:
+        if self._awaiting_recapture:
+            self._input_recorder.stop()
+        super().closeEvent(event)
+
+    def _set_controls_enabled(self, enabled: bool) -> None:
+        self.step_list.setEnabled(enabled)
+        self.field_panel.setEnabled(enabled and self._current_index is not None)
+        self.buttons.setEnabled(enabled)

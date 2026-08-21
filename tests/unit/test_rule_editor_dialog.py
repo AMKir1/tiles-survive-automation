@@ -3,8 +3,10 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
+from PySide6.QtTest import QTest
 
 from tiles_survive_automation.capture.fake_capture import FakeScreenCapture
+from tiles_survive_automation.input.models import RawEvent
 from tiles_survive_automation.recorder.image_io import write_image
 from tiles_survive_automation.rules.models import Rule, RuleStep, StepType, StrategyType
 from tiles_survive_automation.storage.database import connect
@@ -151,3 +153,51 @@ def test_editing_name_refreshes_step_list_row_without_reorder(qtbot, tmp_path):
     dialog.enabled_check.setChecked(False)
 
     assert dialog.step_list.item(0).foreground().color() == QColor(Qt.gray)
+
+
+def test_recapture_updates_step_paths_on_click_inside_window(qtbot, tmp_path):
+    recorder = ScriptedRecorder()
+    dialog, _ = _dialog(qtbot, tmp_path, recorder=recorder)
+    dialog.step_list.setCurrentRow(0)
+
+    dialog.recapture_button.click()
+    assert dialog._awaiting_recapture is True
+    assert dialog.status_label.text().startswith("Click on the game window")
+
+    recorder.emit(RawEvent(timestamp=0.0, kind="mouse_down", x=50, y=40, button="left"))
+    qtbot.waitUntil(lambda: not dialog._awaiting_recapture, timeout=1000)
+
+    step = dialog.controller.draft.steps[0]
+    assert step.template_path is not None
+    assert (tmp_path / "templates" / step.template_path).exists()
+    assert step.screenshot_path is not None
+    assert Path(step.screenshot_path).exists()
+    assert dialog.status_label.text() == "Template recaptured."
+
+
+def test_recapture_ignores_click_outside_client_rect(qtbot, tmp_path):
+    recorder = ScriptedRecorder()
+    dialog, _ = _dialog(qtbot, tmp_path, recorder=recorder)
+    dialog.step_list.setCurrentRow(0)
+    original_template_path = dialog.controller.draft.steps[0].template_path
+
+    dialog.recapture_button.click()
+    recorder.emit(RawEvent(timestamp=0.0, kind="mouse_down", x=5000, y=5000, button="left"))
+    qtbot.wait(50)
+
+    assert dialog._awaiting_recapture is True
+    assert dialog.controller.draft.steps[0].template_path == original_template_path
+
+
+def test_escape_cancels_recapture_without_changing_draft(qtbot, tmp_path):
+    recorder = ScriptedRecorder()
+    dialog, _ = _dialog(qtbot, tmp_path, recorder=recorder)
+    dialog.step_list.setCurrentRow(0)
+    original_template_path = dialog.controller.draft.steps[0].template_path
+
+    dialog.recapture_button.click()
+    QTest.keyClick(dialog, Qt.Key_Escape)
+
+    assert dialog._awaiting_recapture is False
+    assert dialog.controller.draft.steps[0].template_path == original_template_path
+    assert dialog.status_label.text() == "Recapture cancelled."
