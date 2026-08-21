@@ -1,10 +1,12 @@
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
 
+from tiles_survive_automation import config
 from tiles_survive_automation.capture.ports import ScreenCapture
 from tiles_survive_automation.input.ports import InputController
 from tiles_survive_automation.playback.state import PlaybackContext
@@ -117,6 +119,10 @@ class PlaybackEngine:
             self._input_controller.key_press(step.params["key"])
             return (None, None, None, None, f"KeyPress {step.params['key']}")
 
+        if step.step_type in (StepType.WAIT_FOR_IMAGE,
+                              StepType.WAIT_IMAGE_DISAPPEAR):
+            return self._wait_for_image(step, (left, top, width, height))
+
         frame = self._screen_capture.grab((left, top, width, height))
 
         if step.step_type == StepType.DRAG:
@@ -168,6 +174,47 @@ class PlaybackEngine:
 
         return (x, y, matched_template, confidence,
                 f"Click x={abs_x} y={abs_y}")
+
+    def _wait_for_image(self, step: RuleStep, rect: tuple[int, int, int, int]):
+        """Poll the screen until the step's template is present (WaitForImage)
+        or gone (WaitImageDisappear), or until the timeout runs out.
+
+        The gap between polls goes through the abort event rather than
+        time.sleep so F9 cuts a 10-second wait short instead of being noticed
+        only once the wait expires.
+        """
+        template = cv2.imread(str(self._templates_dir / step.template_path))
+        want_visible = step.step_type == StepType.WAIT_FOR_IMAGE
+        timeout_ms = step.params.get("timeout_ms", config.WAIT_FOR_IMAGE_TIMEOUT_MS)
+        poll_s = step.params.get("poll_interval_ms",
+                                 config.WAIT_POLL_INTERVAL_MS) / 1000
+        started = time.monotonic()
+        deadline = started + timeout_ms / 1000
+
+        while True:
+            frame = self._screen_capture.grab(rect)
+            match = self._matcher.find(frame, template, step.confidence_threshold)
+            elapsed_ms = round((time.monotonic() - started) * 1000)
+
+            if (match is not None) == want_visible:
+                if want_visible:
+                    return (*match.center, step.template_path, match.confidence,
+                            f"WaitForImage matched after {elapsed_ms}ms "
+                            f"(confidence={match.confidence:.2f})")
+                return (None, None, None, None,
+                        f"WaitImageDisappear satisfied after {elapsed_ms}ms")
+
+            if time.monotonic() >= deadline:
+                waited_for = "appear" if want_visible else "disappear"
+                return StepFailure(
+                    f"step '{step.name}' timed out after {timeout_ms}ms waiting "
+                    f"for the image to {waited_for}")
+
+            if self._abort_event.wait(poll_s):
+                # Not a failure: the top of run()'s loop turns a set abort event
+                # into STOPPED. Same shape as the plain Wait branch.
+                return (None, None, None, None,
+                        f"{step.step_type.value} aborted after {elapsed_ms}ms")
 
     def _resolve_point(self, step: RuleStep, frame, width: int, height: int,
                          x_key: str, y_key: str):

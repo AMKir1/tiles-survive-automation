@@ -13,10 +13,10 @@ from tiles_survive_automation.window.fake_window_manager import FakeWindowManage
 from tiles_survive_automation.window.ports import WindowInfo
 
 
-def _engine(frame, templates_dir, tmp_path):
+def _engine(frame, templates_dir, tmp_path, capture=None):
     window = WindowInfo(hwnd=1, title="Tiles Survive", client_rect=(0, 0, 100, 100))
     window_manager = FakeWindowManager([window])
-    capture = FakeScreenCapture(frame)
+    capture = capture if capture is not None else FakeScreenCapture(frame)
     input_controller = FakeInputController()
     repo = ExecutionRepository(connect(":memory:"))
     logger = get_execution_logger(tmp_path / "execution.log")
@@ -325,3 +325,80 @@ def test_unresolvable_step_reports_failure_through_step_failure(tmp_path):
 
     assert isinstance(outcome, StepFailure)
     assert outcome.message == "step 'Step' could not be resolved by any strategy"
+
+
+class SequenceCapture:
+    """FakeScreenCapture hands out one frame forever; a wait that only succeeds
+    after a few polls needs the screen to change between grabs. The last frame
+    repeats once the sequence runs out."""
+
+    def __init__(self, frames):
+        self._frames = list(frames)
+        self.grabs = 0
+
+    def grab(self, rect):
+        self.grabs += 1
+        frame = self._frames.pop(0) if len(self._frames) > 1 else self._frames[0]
+        return frame.copy()
+
+
+def _wait_image_step(step_type, template_path="marker.png", timeout_ms=1000,
+                     poll_interval_ms=10, confidence_threshold=0.9):
+    return _step(step_type,
+                 {"timeout_ms": timeout_ms, "poll_interval_ms": poll_interval_ms},
+                 template_path=template_path,
+                 confidence_threshold=confidence_threshold,
+                 strategy=StrategyType.VISUAL_ONLY, name="Wait for panel")
+
+
+def _templates_with_marker(tmp_path):
+    """Returns (templates_dir, marker, blank_frame, frame_with_marker)."""
+    import cv2
+
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    marker = np.full((10, 10, 3), 200, dtype=np.uint8)
+    cv2.imwrite(str(templates_dir / "marker.png"), marker)
+
+    blank = np.full((100, 100, 3), 10, dtype=np.uint8)
+    visible = blank.copy()
+    visible[20:30, 20:30] = marker
+    return templates_dir, marker, blank, visible
+
+
+def test_wait_for_image_succeeds_when_template_is_already_on_screen(tmp_path):
+    templates_dir, _, _, visible = _templates_with_marker(tmp_path)
+    step = _wait_image_step(StepType.WAIT_FOR_IMAGE)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, input_controller = _engine(visible, templates_dir, tmp_path)
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.COMPLETED
+    assert input_controller.calls == []  # a wait never clicks
+
+
+def test_wait_for_image_polls_until_the_template_shows_up(tmp_path):
+    templates_dir, _, blank, visible = _templates_with_marker(tmp_path)
+    capture = SequenceCapture([blank, blank, visible])
+    step = _wait_image_step(StepType.WAIT_FOR_IMAGE)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, _ = _engine(blank, templates_dir, tmp_path, capture=capture)
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.COMPLETED
+    assert capture.grabs == 3
+
+
+def test_wait_for_image_fails_with_its_own_message_on_timeout(tmp_path):
+    templates_dir, _, blank, _ = _templates_with_marker(tmp_path)
+    step = _wait_image_step(StepType.WAIT_FOR_IMAGE, timeout_ms=100, poll_interval_ms=10)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, _ = _engine(blank, templates_dir, tmp_path)
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.FAILED
+    assert "timed out after 100ms" in context.error_message
+    assert "Wait for panel" in context.error_message
