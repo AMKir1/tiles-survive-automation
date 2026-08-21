@@ -35,6 +35,9 @@ class RuleEditorController:
         step = self._draft.steps[index]
         self._draft.steps[index] = replace(step, **fields)
 
+    def draft_from(self, index: int) -> Rule:
+        return replace(self._draft, steps=list(self._draft.steps[index:]))
+
     def save(self) -> Rule:
         self._draft = self._rule_repository.save(self._draft)
         return self._draft

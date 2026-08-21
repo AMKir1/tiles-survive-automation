@@ -132,3 +132,37 @@ def test_original_rule_object_passed_in_is_not_mutated():
     controller.delete_step(2)
 
     assert [s.name for s in original.steps] == ["A", "B", "C"]
+
+
+def test_draft_from_returns_rule_with_steps_from_index_onward():
+    controller = RuleEditorController(_rule(), FakeRuleRepository())
+
+    sliced = controller.draft_from(1)
+
+    assert [s.name for s in sliced.steps] == ["B", "C"]
+    assert sliced.id == controller.draft.id
+    assert sliced.name == controller.draft.name
+
+
+def test_draft_from_index_zero_returns_all_steps():
+    controller = RuleEditorController(_rule(), FakeRuleRepository())
+
+    sliced = controller.draft_from(0)
+
+    assert [s.name for s in sliced.steps] == ["A", "B", "C"]
+
+
+def test_draft_from_index_past_end_returns_empty_steps():
+    controller = RuleEditorController(_rule(), FakeRuleRepository())
+
+    sliced = controller.draft_from(10)
+
+    assert sliced.steps == []
+
+
+def test_draft_from_does_not_mutate_original_draft():
+    controller = RuleEditorController(_rule(), FakeRuleRepository())
+
+    controller.draft_from(1)
+
+    assert [s.name for s in controller.draft.steps] == ["A", "B", "C"]
