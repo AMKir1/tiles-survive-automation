@@ -124,6 +124,10 @@ class RuleEditorDialog(QDialog):
         self.test_button.clicked.connect(self._on_test_clicked)
         self.step_actions_layout.addWidget(self.test_button)
 
+        self.run_from_here_button = QPushButton("Run from here")
+        self.run_from_here_button.clicked.connect(self._on_run_from_here_clicked)
+        self.step_actions_layout.addWidget(self.run_from_here_button)
+
         field_column = QVBoxLayout()
         field_column.addLayout(form)
         field_column.addLayout(previews)
@@ -269,6 +273,19 @@ class RuleEditorDialog(QDialog):
         x, y = match.center
         self.status_label.setText(
             f"Match found: confidence={match.confidence:.2f} at ({x}, {y})")
+
+    def _on_run_from_here_clicked(self) -> None:
+        if self._current_index is None or self._hwnd is None:
+            return
+        rule = self.controller.draft_from(self._current_index)
+        self._set_controls_enabled(False)
+        self._playback_controller.finished.connect(self._on_run_from_here_finished)
+        self._playback_controller.run_async(rule, self._hwnd)
+
+    def _on_run_from_here_finished(self, context) -> None:
+        self._playback_controller.finished.disconnect(self._on_run_from_here_finished)
+        self._set_controls_enabled(True)
+        self.status_label.setText(f"Run from here: {context.state.value}")
 
     def _on_recapture_event(self, event) -> None:
         QTimer.singleShot(0, lambda: self._handle_recapture_event(event))

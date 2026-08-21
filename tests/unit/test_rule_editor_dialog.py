@@ -5,12 +5,17 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 
+from tiles_survive_automation.app_logging.structured_logger import get_execution_logger
 from tiles_survive_automation.capture.fake_capture import FakeScreenCapture
+from tiles_survive_automation.input.fake_input import FakeInputController
 from tiles_survive_automation.input.models import RawEvent
 from tiles_survive_automation.recorder.image_io import write_image
+from tiles_survive_automation.playback.engine import PlaybackEngine
 from tiles_survive_automation.rules.models import Rule, RuleStep, StepType, StrategyType
 from tiles_survive_automation.storage.database import connect
+from tiles_survive_automation.storage.execution_repository import ExecutionRepository
 from tiles_survive_automation.storage.rule_repository import RuleRepository
+from tiles_survive_automation.ui.controllers.playback_controller import PlaybackController
 from tiles_survive_automation.ui.dialogs.rule_editor_dialog import RuleEditorDialog
 from tiles_survive_automation.window.fake_window_manager import FakeWindowManager
 from tiles_survive_automation.window.ports import WindowInfo
@@ -258,3 +263,42 @@ def test_test_button_reports_no_match(qtbot, tmp_path):
     dialog.test_button.click()
 
     assert dialog.status_label.text() == "No match found"
+
+
+def test_step_controls_disabled_when_no_step_is_selected(qtbot, tmp_path):
+    # The plan's version of this test asserted the panel is disabled right after
+    # the dialog opens, but _refresh_list() auto-selects row 0 whenever the rule
+    # has steps -- so the real invariant to pin down is the empty-list one:
+    # nothing selected => no index => Run from here (and every other per-step
+    # action) is unreachable.
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(_step()))
+    dialog.step_list.setCurrentRow(0)
+    assert dialog.field_panel.isEnabled() is True
+
+    dialog._on_delete_clicked()
+
+    assert dialog.step_list.count() == 0
+    assert dialog._current_index is None
+    assert dialog.field_panel.isEnabled() is False
+
+
+def test_run_from_here_executes_only_steps_from_selected_index(qtbot, tmp_path):
+    input_controller = FakeInputController()
+    engine = PlaybackEngine(
+        _window_manager(), _screen_capture(), input_controller,
+        ExecutionRepository(connect(":memory:")),
+        get_execution_logger(tmp_path / "execution.log"), tmp_path / "templates",
+    )
+    controller = PlaybackController(engine)
+
+    steps = [_step(name="A", order_index=0), _step(name="B", order_index=1),
+             _step(name="C", order_index=2)]
+    dialog, _ = _dialog(qtbot, tmp_path, rule=_rule(*steps), playback_controller=controller)
+    dialog.step_list.setCurrentRow(1)
+
+    with qtbot.waitSignal(controller.finished, timeout=2000):
+        dialog.run_from_here_button.click()
+        assert dialog.step_list.isEnabled() is False
+
+    assert dialog.step_list.isEnabled() is True
+    assert len(input_controller.calls) == 2  # only steps B and C ran, not A
