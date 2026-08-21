@@ -1,5 +1,6 @@
 import logging
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -12,6 +13,17 @@ from tiles_survive_automation.rules.models import Rule, RuleStep, StepType, Stra
 from tiles_survive_automation.storage.execution_repository import ExecutionRepository
 from tiles_survive_automation.vision.template_matcher import TemplateMatcher
 from tiles_survive_automation.window.ports import WindowManager
+
+
+@dataclass
+class StepFailure:
+    """A step that could not be carried out, with the reason to show the user.
+
+    Was a bare `None`, which forced run() to invent one fixed message for every
+    kind of failure -- wrong as soon as a wait can time out for its own reason.
+    """
+
+    message: str
 
 
 class PlaybackEngine:
@@ -69,8 +81,8 @@ class PlaybackEngine:
                 self._execution_repository.finish_execution(execution_id, "FAILED", message)
                 return context
 
-            if outcome is None:
-                message = f"step '{step.name}' could not be resolved by any strategy"
+            if isinstance(outcome, StepFailure):
+                message = outcome.message
                 self._logger.error(message, extra={"rule_name": rule.name})
                 self._execution_repository.log_step(
                     execution_id, rule.id or 0, step.id or 0, step.name, None, None,
@@ -111,11 +123,13 @@ class PlaybackEngine:
             from_point = self._resolve_point(step, frame, width, height,
                                                "from_relative_x", "from_relative_y")
             if from_point is None:
-                return None
+                return StepFailure(
+                    f"step '{step.name}' could not be resolved by any strategy")
             to_point = resolve_relative_point(step.params, "to_relative_x",
                                                 "to_relative_y", width, height)
             if to_point is None:
-                return None
+                return StepFailure(
+                    f"step '{step.name}' could not be resolved by any strategy")
             from_x, from_y, matched_template, confidence = from_point
             to_x, to_y = to_point
             duration_ms = step.params.get("duration_ms", 200)
@@ -133,7 +147,8 @@ class PlaybackEngine:
 
         point = self._resolve_point(step, frame, width, height, "relative_x", "relative_y")
         if point is None:
-            return None
+            return StepFailure(
+                f"step '{step.name}' could not be resolved by any strategy")
         x, y, matched_template, confidence = point
         abs_x, abs_y = left + x, top + y
 

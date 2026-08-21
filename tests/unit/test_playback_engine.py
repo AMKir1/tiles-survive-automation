@@ -306,3 +306,22 @@ def test_abort_mid_run_calls_release_all_and_stops(tmp_path):
     # Only one click should have happened (step 1); step 2 was never executed
     click_calls = [c for c in input_controller.calls if c[0] == "click"]
     assert len(click_calls) == 1
+
+
+def test_unresolvable_step_reports_failure_through_step_failure(tmp_path):
+    """The failure contract is an object with a message, not a bare None: a
+    wait that times out must be able to report its own reason instead of
+    inheriting 'could not be resolved by any strategy'."""
+    from tiles_survive_automation.playback.engine import StepFailure
+
+    frame = np.full((100, 100, 3), 10, dtype=np.uint8)
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    step = _step(StepType.CLICK_IMAGE, {}, template_path=None,
+                 strategy=StrategyType.RELATIVE_ONLY)
+    engine, _ = _engine(frame, templates_dir, tmp_path)
+
+    outcome = engine._execute_step(step, hwnd=1)
+
+    assert isinstance(outcome, StepFailure)
+    assert outcome.message == "step 'Step' could not be resolved by any strategy"
