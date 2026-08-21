@@ -98,7 +98,8 @@ fake-реализациями. Не считать фичу готовой, по
 Готово: этап 0, MVP1 (Record → Save → Play, F9, DPI, прерывание кликом),
 плюс сверх спеки — Schedule (повтор батчами), Rename/Delete. MVP2 Rule Editor:
 волна 1 (reorder/delete/rename/enabled/delay/confidence/strategy) и волна 2
-(preview, recapture, test step, run-from-step).
+(preview, recapture, test step, run-from-step) — обе провалидированы на живой
+игре, чек-листы в `docs/manual-testing/` отмечены пройденными.
 
 Не сделано: `WaitForImage`/`WaitImageDisappear` (типы объявлены в `StepType` и
 колонка `verification_json` есть в схеме, но `PlaybackEngine` их не исполняет,
