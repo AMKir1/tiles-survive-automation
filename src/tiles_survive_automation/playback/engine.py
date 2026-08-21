@@ -101,6 +101,15 @@ class PlaybackEngine:
                 confidence, x, y, "SUCCESS", None,
             )
 
+        # The in-loop check only catches an abort raised before the NEXT step,
+        # so an abort during the last step (a long Wait or WaitForImage is where
+        # F9 actually lands) used to fall through and report COMPLETED.
+        if self._abort_event.is_set():
+            context.abort()
+            self._input_controller.release_all()
+            self._execution_repository.finish_execution(execution_id, "STOPPED", None)
+            return context
+
         context.complete()
         self._execution_repository.finish_execution(execution_id, "SUCCESS", None)
         return context

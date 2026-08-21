@@ -402,3 +402,38 @@ def test_wait_for_image_fails_with_its_own_message_on_timeout(tmp_path):
     assert context.state == PlaybackState.FAILED
     assert "timed out after 100ms" in context.error_message
     assert "Wait for panel" in context.error_message
+
+
+class AbortingCapture:
+    """Fires engine.abort() from inside a grab, so the abort lands mid-wait
+    without a thread and without wall-clock timing in the test."""
+
+    def __init__(self, frame, abort_on_grab):
+        self._frame = frame
+        self._abort_on_grab = abort_on_grab
+        self.engine = None
+        self.grabs = 0
+
+    def grab(self, rect):
+        self.grabs += 1
+        if self.grabs >= self._abort_on_grab:
+            self.engine.abort()
+        return self._frame.copy()
+
+
+def test_abort_during_a_wait_stops_the_run_instead_of_waiting_out_the_timeout(tmp_path):
+    templates_dir, _, blank, _ = _templates_with_marker(tmp_path)
+    capture = AbortingCapture(blank, abort_on_grab=2)
+    # A timeout long enough that reaching it would hang the test: the run may
+    # only end this quickly because the abort cut the wait short.
+    step = _wait_image_step(StepType.WAIT_FOR_IMAGE, timeout_ms=60000,
+                            poll_interval_ms=10)
+    rule = Rule(id=1, name="R", description=None, window_title_hint=None, steps=[step])
+    engine, _ = _engine(blank, templates_dir, tmp_path, capture=capture)
+    capture.engine = engine
+
+    context = engine.run(rule, hwnd=1)
+
+    assert context.state == PlaybackState.STOPPED
+    assert context.error_message is None  # aborted, not failed
+    assert capture.grabs == 2
