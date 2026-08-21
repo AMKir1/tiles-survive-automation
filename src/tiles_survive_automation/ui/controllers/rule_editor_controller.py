@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 
-from tiles_survive_automation.rules.models import Rule
+from tiles_survive_automation.rules.models import Rule, RuleStep
 
 
 class RuleEditorController:
@@ -34,6 +34,11 @@ class RuleEditorController:
     def update_step(self, index: int, **fields) -> None:
         step = self._draft.steps[index]
         self._draft.steps[index] = replace(step, **fields)
+
+    def add_step(self, step: RuleStep, after_index: int | None = None) -> None:
+        position = len(self._draft.steps) if after_index is None else after_index + 1
+        self._draft.steps.insert(position, step)
+        self._reindex()
 
     def draft_from(self, index: int) -> Rule:
         return replace(self._draft, steps=list(self._draft.steps[index:]))

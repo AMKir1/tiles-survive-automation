@@ -166,3 +166,49 @@ def test_draft_from_does_not_mutate_original_draft():
     controller.draft_from(1)
 
     assert [s.name for s in controller.draft.steps] == ["A", "B", "C"]
+
+
+def test_add_step_inserts_after_the_given_index_and_reindexes():
+    controller = RuleEditorController(_rule(), FakeRuleRepository())
+
+    controller.add_step(_step(None, 99, "NEW"), after_index=0)
+
+    assert [s.name for s in controller.draft.steps] == ["A", "NEW", "B", "C"]
+    assert [s.order_index for s in controller.draft.steps] == [0, 1, 2, 3]
+
+
+def test_add_step_without_an_index_appends_to_the_end():
+    controller = RuleEditorController(_rule(), FakeRuleRepository())
+
+    controller.add_step(_step(None, 99, "NEW"))
+
+    assert [s.name for s in controller.draft.steps] == ["A", "B", "C", "NEW"]
+    assert [s.order_index for s in controller.draft.steps] == [0, 1, 2, 3]
+
+
+def test_add_step_after_the_last_index_appends():
+    controller = RuleEditorController(_rule(), FakeRuleRepository())
+
+    controller.add_step(_step(None, 99, "NEW"), after_index=2)
+
+    assert [s.name for s in controller.draft.steps] == ["A", "B", "C", "NEW"]
+
+
+def test_add_step_into_an_empty_draft_produces_a_single_step():
+    controller = RuleEditorController(_rule(), FakeRuleRepository())
+    for _ in range(3):
+        controller.delete_step(0)
+
+    controller.add_step(_step(None, 99, "NEW"))
+
+    assert [s.name for s in controller.draft.steps] == ["NEW"]
+    assert controller.draft.steps[0].order_index == 0
+
+
+def test_add_step_does_not_write_to_the_repository():
+    repository = FakeRuleRepository()
+    controller = RuleEditorController(_rule(), repository)
+
+    controller.add_step(_step(None, 99, "NEW"))
+
+    assert repository.save_calls == []
