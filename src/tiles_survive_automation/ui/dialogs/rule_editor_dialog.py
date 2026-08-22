@@ -47,6 +47,13 @@ class RuleEditorDialog(QDialog):
                  screenshots_dir, hwnd, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Edit Rule — {rule.name}")
+        # Set once, before the dialog is ever shown. Recapture raises the game
+        # over this dialog and Windows will not hand the foreground back, so the
+        # prompt has to sit above it. Flipping this flag later is not an option:
+        # setWindowFlag() hides a visible widget, and hiding a QDialog inside
+        # exec() ends its modal loop -- which closed the editor and discarded
+        # the draft the moment the user pressed Recapture.
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.controller = RuleEditorController(rule, rule_repository)
         self._window_manager = window_manager
         self._screen_capture = screen_capture
@@ -312,7 +319,6 @@ class RuleEditorDialog(QDialog):
             return
         self._awaiting_recapture = True
         self._set_controls_enabled(False)
-        self._set_stay_on_top(True)
         self.status_label.setStyleSheet("font-weight: bold")
         self.status_label.setText(
             "Click on the game window now — one click on the spot to capture. "
@@ -412,14 +418,7 @@ class RuleEditorDialog(QDialog):
     def _end_recapture_wait(self) -> None:
         self._awaiting_recapture = False
         self._recapture_timeout.stop()
-        self._set_stay_on_top(False)
         self.status_label.setStyleSheet("")
-
-    def _set_stay_on_top(self, on_top: bool) -> None:
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, on_top)
-        if self.isVisible():
-            # Changing window flags hides the widget on Windows.
-            self.show()
 
     def _return_to_front(self) -> None:
         window = self.window()

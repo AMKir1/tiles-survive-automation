@@ -524,18 +524,21 @@ def test_recapture_prompt_lives_outside_the_panel_it_disables(qtbot, tmp_path):
     assert dialog.status_label.text().startswith("Click on the game window")
 
 
-def test_recapture_puts_the_dialog_on_top_and_lets_go_afterwards(qtbot, tmp_path):
+def test_dialog_stays_on_top_from_the_start(qtbot, tmp_path):
     """activate() raises the game over this dialog, and Windows refuses to let
     a background process take the foreground back, so without this flag the
-    prompt is invisible exactly when it matters."""
+    prompt is invisible exactly when it matters. The flag is set at
+    construction and never toggled: changing it on a visible dialog hides it,
+    which ends exec() and closes the editor."""
     dialog, _ = _dialog(qtbot, tmp_path)
-    dialog.step_list.setCurrentRow(0)
 
-    dialog.recapture_button.click()
     assert bool(dialog.windowFlags() & Qt.WindowStaysOnTopHint) is True
 
+    dialog.step_list.setCurrentRow(0)
+    dialog.recapture_button.click()
     QTest.keyClick(dialog, Qt.Key_Escape)
-    assert bool(dialog.windowFlags() & Qt.WindowStaysOnTopHint) is False
+
+    assert bool(dialog.windowFlags() & Qt.WindowStaysOnTopHint) is True
 
 
 def test_recapture_gives_up_after_the_timeout_instead_of_waiting_forever(qtbot,
@@ -565,3 +568,19 @@ def test_saving_while_a_recapture_is_pending_stops_the_recorder(qtbot, tmp_path)
 
     assert dialog._awaiting_recapture is False
     assert recorder._on_event is None  # listener released, not left hooked
+
+
+def test_starting_a_recapture_does_not_close_the_visible_dialog(qtbot, tmp_path):
+    """setWindowFlag() hides a visible widget, and hiding a QDialog inside
+    exec() ends its modal loop -- pressing Recapture closed the editor and
+    threw the draft away. The tests above never caught it because a dialog
+    that was never shown cannot be hidden."""
+    dialog, _ = _dialog(qtbot, tmp_path)
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    dialog.step_list.setCurrentRow(0)
+
+    dialog.recapture_button.click()
+
+    assert dialog.isVisible() is True
+    assert dialog._awaiting_recapture is True
