@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 import cv2
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tiles_survive_automation import config
 from tiles_survive_automation.recorder.image_io import write_image
 from tiles_survive_automation.recorder.template_capture import capture_template
 from tiles_survive_automation.rules.models import StepType, StrategyType
@@ -56,6 +57,9 @@ class RuleEditorDialog(QDialog):
         self._hwnd = hwnd
         self._current_index: int | None = None
         self._awaiting_recapture = False
+        self._recapture_timeout = QTimer(self)
+        self._recapture_timeout.setSingleShot(True)
+        self._recapture_timeout.timeout.connect(self._on_recapture_timeout)
         self._matcher = TemplateMatcher()
         self._recapture_event.connect(self._handle_recapture_event)
         self._build_ui()
@@ -128,6 +132,9 @@ class RuleEditorDialog(QDialog):
         previews.addWidget(self.screenshot_preview)
         previews.addWidget(self.template_preview)
 
+        # Deliberately NOT part of field_panel: the panel is disabled while the
+        # dialog waits for a click on the game, and a greyed-out prompt is
+        # exactly the thing the user needs to read at that moment.
         self.status_label = QLabel("")
 
         self.step_actions_layout = QHBoxLayout()
@@ -148,7 +155,6 @@ class RuleEditorDialog(QDialog):
         field_column.addLayout(form)
         field_column.addLayout(previews)
         field_column.addLayout(self.step_actions_layout)
-        field_column.addWidget(self.status_label)
 
         self.field_panel = QWidget()
         self.field_panel.setLayout(field_column)
@@ -164,6 +170,7 @@ class RuleEditorDialog(QDialog):
 
         outer = QVBoxLayout()
         outer.addLayout(split)
+        outer.addWidget(self.status_label)
         outer.addWidget(self.buttons)
         self.setLayout(outer)
 
@@ -294,6 +301,9 @@ class RuleEditorDialog(QDialog):
         self.step_list.setCurrentRow(new_index)
 
     def _on_save_clicked(self) -> None:
+        if self._awaiting_recapture:
+            self._input_recorder.stop()
+            self._end_recapture_wait()
         self.controller.save()
         self.accept()
 
@@ -302,7 +312,12 @@ class RuleEditorDialog(QDialog):
             return
         self._awaiting_recapture = True
         self._set_controls_enabled(False)
-        self.status_label.setText("Click on the game window now… (Esc to cancel)")
+        self._set_stay_on_top(True)
+        self.status_label.setStyleSheet("font-weight: bold")
+        self.status_label.setText(
+            "Click on the game window now — one click on the spot to capture. "
+            "(Esc or Cancel to abort)")
+        self._recapture_timeout.start(config.RECAPTURE_TIMEOUT_MS)
         self._window_manager.activate(self._hwnd)
         self._recapture_session_id = uuid.uuid4().hex[:8]
         self._input_recorder.start(on_event=self._on_recapture_event)
@@ -371,7 +386,7 @@ class RuleEditorDialog(QDialog):
             template_path=f"{self._recapture_session_id}/recapture.png",
             screenshot_path=str(screenshot_path),
         )
-        self._awaiting_recapture = False
+        self._end_recapture_wait()
         self._on_step_selected(self._current_index)
         self.status_label.setText("Template recaptured.")
         self._set_controls_enabled(True)
@@ -379,12 +394,32 @@ class RuleEditorDialog(QDialog):
         # the user would never see the new preview or the status line.
         self._return_to_front()
 
-    def _cancel_recapture(self) -> None:
+    def _cancel_recapture(self, message: str = "Recapture cancelled.") -> None:
         self._input_recorder.stop()
-        self._awaiting_recapture = False
-        self.status_label.setText("Recapture cancelled.")
+        self._end_recapture_wait()
+        self.status_label.setText(message)
         self._set_controls_enabled(True)
         self._return_to_front()
+
+    def _on_recapture_timeout(self) -> None:
+        if not self._awaiting_recapture:
+            return
+        self._cancel_recapture(
+            f"Recapture timed out after "
+            f"{config.RECAPTURE_TIMEOUT_MS // 1000}s — no click on the game "
+            f"window was detected. Nothing was changed.")
+
+    def _end_recapture_wait(self) -> None:
+        self._awaiting_recapture = False
+        self._recapture_timeout.stop()
+        self._set_stay_on_top(False)
+        self.status_label.setStyleSheet("")
+
+    def _set_stay_on_top(self, on_top: bool) -> None:
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, on_top)
+        if self.isVisible():
+            # Changing window flags hides the widget on Windows.
+            self.show()
 
     def _return_to_front(self) -> None:
         window = self.window()
@@ -400,9 +435,12 @@ class RuleEditorDialog(QDialog):
     def closeEvent(self, event) -> None:
         if self._awaiting_recapture:
             self._input_recorder.stop()
+            self._end_recapture_wait()
         super().closeEvent(event)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         self.step_list.setEnabled(enabled)
         self.field_panel.setEnabled(enabled and self._current_index is not None)
-        self.buttons.setEnabled(enabled)
+        # self.buttons stays enabled on purpose: Cancel is the discoverable way
+        # out of a pending recapture. Esc works too, but nothing on screen says
+        # so once the game covers the dialog.

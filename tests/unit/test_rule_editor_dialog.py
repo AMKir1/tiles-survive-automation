@@ -497,3 +497,71 @@ def test_controls_come_back_after_a_successful_recapture(qtbot, tmp_path):
     assert dialog.field_panel.isEnabled() is True
     assert dialog.buttons.isEnabled() is True
     assert dialog.step_list.isEnabled() is True
+
+
+def test_recapture_leaves_save_and_cancel_reachable_while_waiting(qtbot, tmp_path):
+    """Pressing a button must never lock the user in: while the dialog waits
+    for a click on the game, Cancel is the visible way back. Esc alone is not
+    discoverable, and the prompt saying so used to be greyed out and hidden
+    behind the game window."""
+    dialog, _ = _dialog(qtbot, tmp_path)
+    dialog.step_list.setCurrentRow(0)
+
+    dialog.recapture_button.click()
+
+    assert dialog._awaiting_recapture is True
+    assert dialog.buttons.isEnabled() is True
+
+
+def test_recapture_prompt_lives_outside_the_panel_it_disables(qtbot, tmp_path):
+    dialog, _ = _dialog(qtbot, tmp_path)
+    dialog.step_list.setCurrentRow(0)
+
+    dialog.recapture_button.click()
+
+    assert dialog.field_panel.isAncestorOf(dialog.status_label) is False
+    assert dialog.status_label.isEnabled() is True
+    assert dialog.status_label.text().startswith("Click on the game window")
+
+
+def test_recapture_puts_the_dialog_on_top_and_lets_go_afterwards(qtbot, tmp_path):
+    """activate() raises the game over this dialog, and Windows refuses to let
+    a background process take the foreground back, so without this flag the
+    prompt is invisible exactly when it matters."""
+    dialog, _ = _dialog(qtbot, tmp_path)
+    dialog.step_list.setCurrentRow(0)
+
+    dialog.recapture_button.click()
+    assert bool(dialog.windowFlags() & Qt.WindowStaysOnTopHint) is True
+
+    QTest.keyClick(dialog, Qt.Key_Escape)
+    assert bool(dialog.windowFlags() & Qt.WindowStaysOnTopHint) is False
+
+
+def test_recapture_gives_up_after_the_timeout_instead_of_waiting_forever(qtbot,
+                                                                        tmp_path,
+                                                                        monkeypatch):
+    from tiles_survive_automation import config
+
+    monkeypatch.setattr(config, "RECAPTURE_TIMEOUT_MS", 50)
+    dialog, _ = _dialog(qtbot, tmp_path)
+    dialog.step_list.setCurrentRow(0)
+
+    dialog.recapture_button.click()
+    qtbot.waitUntil(lambda: not dialog._awaiting_recapture, timeout=2000)
+
+    assert "timed out" in dialog.status_label.text().lower()
+    assert dialog.field_panel.isEnabled() is True
+    assert dialog.buttons.isEnabled() is True
+
+
+def test_saving_while_a_recapture_is_pending_stops_the_recorder(qtbot, tmp_path):
+    recorder = ScriptedRecorder()
+    dialog, _ = _dialog(qtbot, tmp_path, recorder=recorder)
+    dialog.step_list.setCurrentRow(0)
+    dialog.recapture_button.click()
+
+    dialog._on_save_clicked()
+
+    assert dialog._awaiting_recapture is False
+    assert recorder._on_event is None  # listener released, not left hooked
